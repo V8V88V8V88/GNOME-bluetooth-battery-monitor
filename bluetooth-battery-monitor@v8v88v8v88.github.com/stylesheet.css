@@ -1,0 +1,13 @@
+.bluetooth-battery-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.bluetooth-device-item {
+    spacing: 6px;
+}
+
+.bluetooth-device-battery-level {
+    font-size: 0.9em;
+    color: #888888;
+}

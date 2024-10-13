@@ -1,0 +1,8 @@
+{
+    "uuid": "bluetooth-battery-monitor@v8v88v8v88.github.com",
+    "name": "Bluetooth Battery Monitor",
+    "description": "Displays the battery levels of connected Bluetooth devices.",
+    "shell-version": ["45", "46", "47"],  
+    "version": 1.0
+}
+
