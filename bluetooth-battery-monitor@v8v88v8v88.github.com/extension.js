@@ -1,146 +1,173 @@
-const { GObject, St, Gio, GLib } = imports.gi;
-const Main = imports.ui.main;
-const PanelMenu = imports.ui.panelMenu;
-const PopupMenu = imports.ui.popupMenu;
-const Bluetooth = imports.ui.status.bluetooth;
+import GObject from 'gi://GObject';
+import St from 'gi://St';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
 
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-const BluetoothBatteryMonitor = GObject.registerClass(
-  class BluetoothBatteryMonitor extends PanelMenu.Button {
-    _init() {
-      super._init(0.0, "Bluetooth Battery Monitor");
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-      this._icon = new St.Icon({
-        icon_name: "bluetooth-active-symbolic",
-        style_class: "system-status-icon",
-      });
+const UPOWER_BUS = 'org.freedesktop.UPower';
+const UPOWER_PATH = '/org/freedesktop/UPower';
+const UPOWER_IFACE = 'org.freedesktop.UPower';
+const DEVICE_IFACE = 'org.freedesktop.UPower.Device';
+const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 
-      this.add_child(this._icon);
+const BluetoothBatteryIndicator = GObject.registerClass(
+class BluetoothBatteryIndicator extends PanelMenu.Button {
+    _init(extensionObj) {
+        super._init(0.0, 'Bluetooth Battery Monitor');
 
-      this._deviceItems = new Map();
-      this._bluetoothClient = Bluetooth.getClient();
+        this._extensionObj = extensionObj;
+        this._settings = extensionObj.getSettings();
 
-      this._bluetoothClient.connect(
-        "device-added",
-        this._onDeviceAdded.bind(this),
-      );
-      this._bluetoothClient.connect(
-        "device-removed",
-        this._onDeviceRemoved.bind(this),
-      );
-
-      this._buildMenu();
-      this._updateDevices();
-    }
-
-    _buildMenu() {
-      this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-      this.settingsItem = new PopupMenu.PopupMenuItem(_("Settings"));
-      this.settingsItem.connect("activate", () => {
-        ExtensionUtils.openPrefs();
-      });
-      this.menu.addMenuItem(this.settingsItem);
-    }
-
-    _updateDevices() {
-      const devices = this._bluetoothClient.getDevices();
-      devices.forEach((device) => {
-        if (device.connected && !this._deviceItems.has(device.address)) {
-          this._onDeviceAdded(this._bluetoothClient, device);
-        }
-      });
-    }
-
-    _onDeviceAdded(client, device) {
-      if (!device.connected) return;
-
-      const menuItem = new PopupMenu.PopupMenuItem(device.alias);
-      menuItem.connect("activate", () => {
-        // Implement disconnect functionality
-        device.disconnect((error) => {
-          if (error) {
-            log(`Error disconnecting device: ${error.message}`);
-          }
+        this._icon = new St.Icon({
+            icon_name: 'bluetooth-active-symbolic',
+            style_class: 'system-status-icon',
         });
-      });
+        this.add_child(this._icon);
 
-      const batteryLevel = new St.Label({ text: this._getBatteryText(device) });
-      menuItem.add_child(batteryLevel);
-
-      this.menu.addMenuItem(menuItem);
-      this._deviceItems.set(device.address, { menuItem, batteryLevel });
-
-      this._startBatteryMonitor(device);
+        this._signalIds = [];
+        this._setupUPowerProxy();
+        this._refresh();
+        this._startPolling();
     }
 
-    _onDeviceRemoved(client, device) {
-      const item = this._deviceItems.get(device.address);
-      if (item) {
-        item.menuItem.destroy();
-        this._deviceItems.delete(device.address);
-      }
+    _setupUPowerProxy() {
+        this._upower = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SYSTEM,
+            Gio.DBusProxyFlags.NONE,
+            null,
+            UPOWER_BUS,
+            UPOWER_PATH,
+            UPOWER_IFACE,
+            null,
+        );
+
+        const id = this._upower.connect('g-signal', (_proxy, _sender, signal) => {
+            if (signal === 'DeviceAdded' || signal === 'DeviceRemoved')
+                this._refresh();
+        });
+        this._signalIds.push({obj: this._upower, id});
     }
 
-    _getBatteryText(device) {
-      return device.battery_level !== null ? `${device.battery_level}%` : "N/A";
-    }
-
-    _startBatteryMonitor(device) {
-      const updateBattery = () => {
-        const item = this._deviceItems.get(device.address);
-        if (item) {
-          item.batteryLevel.text = this._getBatteryText(device);
+    _enumerateDevices() {
+        try {
+            const result = this._upower.call_sync(
+                'EnumerateDevices',
+                null,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                null,
+            );
+            return result.deep_unpack()[0];
+        } catch (e) {
+            console.error(`BluetoothBatteryMonitor: ${e.message}`);
+            return [];
         }
-      };
+    }
 
-      // Update every 5 minutes
-      const sourceId = GLib.timeout_add_seconds(
-        GLib.PRIORITY_DEFAULT,
-        300,
-        () => {
-          if (device.connected) {
-            updateBattery();
-            return GLib.SOURCE_CONTINUE;
-          } else {
-            return GLib.SOURCE_REMOVE;
-          }
-        },
-      );
+    _getDeviceProperties(objectPath) {
+        try {
+            const proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM,
+                Gio.DBusProxyFlags.NONE,
+                null,
+                UPOWER_BUS,
+                objectPath,
+                PROPERTIES_IFACE,
+                null,
+            );
 
-      // Store the source ID to remove it later if needed
-      this._deviceItems.get(device.address).sourceId = sourceId;
+            const result = proxy.call_sync(
+                'GetAll',
+                new GLib.Variant('(s)', [DEVICE_IFACE]),
+                Gio.DBusCallFlags.NONE,
+                -1,
+                null,
+            );
+
+            const props = result.deep_unpack()[0];
+            return {
+                type: props['Type']?.deep_unpack(),
+                model: props['Model']?.deep_unpack() || 'Unknown Device',
+                percentage: props['Percentage']?.deep_unpack() || 0,
+                isPresent: props['IsPresent']?.deep_unpack() || false,
+            };
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    _refresh() {
+        this.menu.removeAll();
+
+        const devicePaths = this._enumerateDevices();
+        let hasDevices = false;
+
+        for (const path of devicePaths) {
+            const props = this._getDeviceProperties(path);
+            if (!props || !props.isPresent)
+                continue;
+
+            if (props.type === 1 || props.type === 2)
+                continue;
+
+            hasDevices = true;
+            const batteryText = `${Math.round(props.percentage)}%`;
+
+            const item = new PopupMenu.PopupMenuItem(props.model);
+            const batteryLabel = new St.Label({
+                text: batteryText,
+                style_class: 'bluetooth-device-battery-level',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            item.add_child(batteryLabel);
+            this.menu.addMenuItem(item);
+        }
+
+        if (!hasDevices) {
+            const noDevices = new PopupMenu.PopupMenuItem('No devices found');
+            noDevices.setSensitive(false);
+            this.menu.addMenuItem(noDevices);
+        }
+    }
+
+    _startPolling() {
+        const interval = this._settings.get_int('update-interval') * 60;
+        this._pollSourceId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT,
+            interval,
+            () => {
+                this._refresh();
+                return GLib.SOURCE_CONTINUE;
+            },
+        );
     }
 
     destroy() {
-      this._deviceItems.forEach((item, address) => {
-        if (item.sourceId) {
-          GLib.source_remove(item.sourceId);
+        if (this._pollSourceId) {
+            GLib.source_remove(this._pollSourceId);
+            this._pollSourceId = null;
         }
-      });
-      super.destroy();
+        for (const {obj, id} of this._signalIds)
+            obj.disconnect(id);
+        this._signalIds = [];
+        super.destroy();
     }
-  },
-);
+});
 
-class Extension {
-  constructor(uuid) {
-    this._uuid = uuid;
-    ExtensionUtils.initTranslations(this._uuid);
-  }
+export default class BluetoothBatteryMonitorExtension extends Extension {
+    enable() {
+        this._indicator = new BluetoothBatteryIndicator(this);
+        Main.panel.addToStatusArea(this.uuid, this._indicator);
+    }
 
-  enable() {
-    this._indicator = new BluetoothBatteryMonitor();
-    Main.panel.addToStatusArea(this._uuid, this._indicator);
-  }
-
-  disable() {
-    this._indicator.destroy();
-    this._indicator = null;
-  }
-}
-
-function init(meta) {
-  return new Extension(meta.uuid);
+    disable() {
+        this._indicator?.destroy();
+        this._indicator = null;
+    }
 }
