@@ -16,6 +16,93 @@ const UPOWER_IFACE = 'org.freedesktop.UPower';
 const DEVICE_IFACE = 'org.freedesktop.UPower.Device';
 const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 
+function drawBatteryVertical(cr, width, height, percentage, panelFg) {
+    const pct = Math.max(0, Math.min(100, percentage));
+    const capH = 2;
+    const capW = width * 0.4;
+    const bodyY = capH;
+    const bodyW = width;
+    const bodyH = height - capH;
+    const r = 2;
+    const lw = 1.2;
+
+    cr.setLineWidth(lw);
+    cr.setSourceRGBA(panelFg[0], panelFg[1], panelFg[2], 0.85);
+
+    cr.rectangle((bodyW - capW) / 2, 0, capW, capH);
+    cr.fill();
+
+    const half = lw / 2;
+    const bx = half;
+    const by = bodyY + half;
+    const bw = bodyW - lw;
+    const bh = bodyH - lw;
+
+    cr.newSubPath();
+    cr.arc(bx + r, by + r, r, Math.PI, 1.5 * Math.PI);
+    cr.arc(bx + bw - r, by + r, r, 1.5 * Math.PI, 0);
+    cr.arc(bx + bw - r, by + bh - r, r, 0, 0.5 * Math.PI);
+    cr.arc(bx + r, by + bh - r, r, 0.5 * Math.PI, Math.PI);
+    cr.closePath();
+    cr.stroke();
+
+    const pad = lw + 1;
+    const fillMaxW = bodyW - pad * 2;
+    const fillMaxH = bodyH - pad * 2;
+    const fillH = Math.round(fillMaxH * (pct / 100));
+
+    if (pct > 50)
+        cr.setSourceRGBA(0.3, 0.85, 0.35, 1);
+    else if (pct > 20)
+        cr.setSourceRGBA(1, 0.75, 0.1, 1);
+    else
+        cr.setSourceRGBA(1, 0.2, 0.2, 1);
+
+    if (fillH > 0)
+        cr.rectangle(pad, bodyY + pad + (fillMaxH - fillH), fillMaxW, fillH);
+    cr.fill();
+}
+
+function drawBatteryHorizontal(cr, width, height, percentage, panelFg) {
+    const pct = Math.max(0, Math.min(100, percentage));
+    const bodyW = width - 3;
+    const bodyH = height;
+    const r = 2;
+    const lw = 1.2;
+
+    cr.setLineWidth(lw);
+    cr.setSourceRGBA(panelFg[0], panelFg[1], panelFg[2], 0.85);
+
+    const half = lw / 2;
+    cr.newSubPath();
+    cr.arc(half + r, half + r, r, Math.PI, 1.5 * Math.PI);
+    cr.arc(bodyW - half - r, half + r, r, 1.5 * Math.PI, 0);
+    cr.arc(bodyW - half - r, bodyH - half - r, r, 0, 0.5 * Math.PI);
+    cr.arc(half + r, bodyH - half - r, r, 0.5 * Math.PI, Math.PI);
+    cr.closePath();
+    cr.stroke();
+
+    const nubH = bodyH * 0.4;
+    cr.rectangle(bodyW, (bodyH - nubH) / 2, 2, nubH);
+    cr.fill();
+
+    const pad = lw + 1;
+    const fillMaxW = bodyW - pad * 2;
+    const fillMaxH = bodyH - pad * 2;
+    const fillW = Math.round(fillMaxW * (pct / 100));
+
+    if (pct > 50)
+        cr.setSourceRGBA(0.3, 0.85, 0.35, 1);
+    else if (pct > 20)
+        cr.setSourceRGBA(1, 0.75, 0.1, 1);
+    else
+        cr.setSourceRGBA(1, 0.2, 0.2, 1);
+
+    if (fillW > 0)
+        cr.rectangle(pad, pad, fillW, fillMaxH);
+    cr.fill();
+}
+
 const BluetoothBatteryIndicator = GObject.registerClass(
 class BluetoothBatteryIndicator extends PanelMenu.Button {
     _init(extensionObj) {
@@ -23,17 +110,57 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
 
         this._extensionObj = extensionObj;
         this._settings = extensionObj.getSettings();
+        this._primaryPercentage = -1;
+        this._panelFg = [1, 1, 1];
 
-        this._icon = new St.Icon({
-            icon_name: 'bluetooth-active-symbolic',
-            style_class: 'system-status-icon',
+        this._box = new St.BoxLayout({
+            style_class: 'panel-status-indicators-box',
         });
-        this.add_child(this._icon);
+        this.add_child(this._box);
+
+        this._btIcon = new St.Icon({
+            icon_name: 'bluetooth-active-symbolic',
+            style_class: 'system-status-icon bluetooth-battery-bt-icon',
+        });
+        this._box.add_child(this._btIcon);
+
+        this._batteryIcon = new St.DrawingArea({
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'bluetooth-battery-vertical-icon',
+        });
+        this._batteryIcon.set_size(10, 16);
+        this._batteryIcon.connect('repaint', (area) => {
+            const cr = area.get_context();
+            const [w, h] = area.get_surface_size();
+            drawBatteryVertical(cr, w, h, this._primaryPercentage, this._panelFg);
+            cr.$dispose();
+        });
+        this._box.add_child(this._batteryIcon);
+
+        this._percentLabel = new St.Label({
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'bluetooth-battery-panel-label',
+            visible: false,
+        });
+        this._box.add_child(this._percentLabel);
+
+        this.connect('notify::hover', () => {
+            if (this._primaryPercentage >= 0)
+                this._percentLabel.visible = this.hover;
+        });
 
         this._signalIds = [];
         this._setupUPowerProxy();
         this._refresh();
         this._startPolling();
+    }
+
+    _resolvePanelFg() {
+        const themeNode = this._percentLabel.get_theme_node();
+        if (themeNode) {
+            const color = themeNode.get_foreground_color();
+            this._panelFg = [color.red / 255, color.green / 255, color.blue / 255];
+        }
     }
 
     _setupUPowerProxy() {
@@ -106,33 +233,64 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this.menu.removeAll();
 
         const devicePaths = this._enumerateDevices();
-        let hasDevices = false;
+        const devices = [];
 
         for (const path of devicePaths) {
             const props = this._getDeviceProperties(path);
             if (!props || !props.isPresent)
                 continue;
-
             if (props.type === 1 || props.type === 2)
                 continue;
-
-            hasDevices = true;
-            const batteryText = `${Math.round(props.percentage)}%`;
-
-            const item = new PopupMenu.PopupMenuItem(props.model);
-            const batteryLabel = new St.Label({
-                text: batteryText,
-                style_class: 'bluetooth-device-battery-level',
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            item.add_child(batteryLabel);
-            this.menu.addMenuItem(item);
+            devices.push(props);
         }
 
-        if (!hasDevices) {
-            const noDevices = new PopupMenu.PopupMenuItem('No devices found');
-            noDevices.setSensitive(false);
-            this.menu.addMenuItem(noDevices);
+        if (devices.length === 0) {
+            this.visible = false;
+            return;
+        }
+
+        this.visible = true;
+        this._resolvePanelFg();
+
+        const lowest = devices.reduce((a, b) =>
+            a.percentage <= b.percentage ? a : b);
+        this._primaryPercentage = Math.round(lowest.percentage);
+
+        this._percentLabel.text = `${this._primaryPercentage}%`;
+        this._percentLabel.visible = this.hover;
+        this._batteryIcon.queue_repaint();
+
+        for (const dev of devices) {
+            const pct = Math.round(dev.percentage);
+            const item = new PopupMenu.PopupBaseMenuItem();
+
+            const nameLabel = new St.Label({
+                text: dev.model,
+                y_align: Clutter.ActorAlign.CENTER,
+                x_expand: true,
+            });
+            item.add_child(nameLabel);
+
+            const batteryArea = new St.DrawingArea({
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            batteryArea.set_size(20, 10);
+            batteryArea.connect('repaint', (area) => {
+                const cr = area.get_context();
+                const [w, h] = area.get_surface_size();
+                drawBatteryHorizontal(cr, w, h, pct, [1, 1, 1]);
+                cr.$dispose();
+            });
+            item.add_child(batteryArea);
+
+            const pctLabel = new St.Label({
+                text: `${pct}%`,
+                y_align: Clutter.ActorAlign.CENTER,
+                style_class: 'bluetooth-battery-menu-percent',
+            });
+            item.add_child(pctLabel);
+
+            this.menu.addMenuItem(item);
         }
     }
 

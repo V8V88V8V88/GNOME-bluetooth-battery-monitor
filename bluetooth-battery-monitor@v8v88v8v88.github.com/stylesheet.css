@@ -1,13 +1,20 @@
-.bluetooth-battery-icon {
-    width: 16px;
-    height: 16px;
+.bluetooth-battery-bt-icon {
+    icon-size: 14px;
+    margin-right: 2px;
 }
 
-.bluetooth-device-item {
-    spacing: 6px;
+.bluetooth-battery-vertical-icon {
+    margin-left: 0;
+    margin-right: 0;
 }
 
-.bluetooth-device-battery-level {
+.bluetooth-battery-panel-label {
+    font-size: 0.85em;
+    margin-left: 4px;
+}
+
+.bluetooth-battery-menu-percent {
     font-size: 0.9em;
-    color: #888888;
+    min-width: 36px;
+    margin-left: 8px;
 }
