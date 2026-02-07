@@ -16,6 +16,9 @@ const UPOWER_IFACE = 'org.freedesktop.UPower';
 const DEVICE_IFACE = 'org.freedesktop.UPower.Device';
 const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 
+const DEVICE_TYPE_LINE_POWER = 1;
+const DEVICE_TYPE_BATTERY = 2;
+
 function drawBatteryVertical(cr, width, height, percentage, panelFg) {
     const pct = Math.max(0, Math.min(100, percentage));
     const capH = 2;
@@ -112,6 +115,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this._settings = extensionObj.getSettings();
         this._primaryPercentage = -1;
         this._panelFg = [1, 1, 1];
+        this._proxyCache = new Map();
 
         this._box = new St.BoxLayout({
             style_class: 'panel-status-indicators-box',
@@ -153,6 +157,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this._setupUPowerProxy();
         this._refresh();
         this._startPolling();
+
+        this._settingsChangedId = this._settings.connect('changed::update-interval', () => {
+            this._restartPolling();
+        });
     }
 
     _resolvePanelFg() {
@@ -175,8 +183,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         );
 
         const id = this._upower.connect('g-signal', (_proxy, _sender, signal) => {
-            if (signal === 'DeviceAdded' || signal === 'DeviceRemoved')
+            if (signal === 'DeviceAdded' || signal === 'DeviceRemoved') {
+                this._proxyCache.clear();
                 this._refresh();
+            }
         });
         this._signalIds.push({obj: this._upower, id});
     }
@@ -197,18 +207,27 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         }
     }
 
+    _getPropertiesProxy(objectPath) {
+        let proxy = this._proxyCache.get(objectPath);
+        if (proxy)
+            return proxy;
+
+        proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SYSTEM,
+            Gio.DBusProxyFlags.NONE,
+            null,
+            UPOWER_BUS,
+            objectPath,
+            PROPERTIES_IFACE,
+            null,
+        );
+        this._proxyCache.set(objectPath, proxy);
+        return proxy;
+    }
+
     _getDeviceProperties(objectPath) {
         try {
-            const proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SYSTEM,
-                Gio.DBusProxyFlags.NONE,
-                null,
-                UPOWER_BUS,
-                objectPath,
-                PROPERTIES_IFACE,
-                null,
-            );
-
+            const proxy = this._getPropertiesProxy(objectPath);
             const result = proxy.call_sync(
                 'GetAll',
                 new GLib.Variant('(s)', [DEVICE_IFACE]),
@@ -225,6 +244,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                 isPresent: props['IsPresent']?.deep_unpack() || false,
             };
         } catch (_e) {
+            this._proxyCache.delete(objectPath);
             return null;
         }
     }
@@ -239,7 +259,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             const props = this._getDeviceProperties(path);
             if (!props || !props.isPresent)
                 continue;
-            if (props.type === 1 || props.type === 2)
+            if (props.type === DEVICE_TYPE_LINE_POWER || props.type === DEVICE_TYPE_BATTERY)
                 continue;
             devices.push(props);
         }
@@ -278,7 +298,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             batteryArea.connect('repaint', (area) => {
                 const cr = area.get_context();
                 const [w, h] = area.get_surface_size();
-                drawBatteryHorizontal(cr, w, h, pct, [1, 1, 1]);
+                drawBatteryHorizontal(cr, w, h, pct, this._panelFg);
                 cr.$dispose();
             });
             item.add_child(batteryArea);
@@ -289,6 +309,19 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                 style_class: 'bluetooth-battery-menu-percent',
             });
             item.add_child(pctLabel);
+
+            item.connect('activate', () => {
+                try {
+                    Gio.app_info_launch_default_for_uri(
+                        'gnome-control-center://bluetooth', null);
+                } catch (_e) {
+                    const subprocess = new Gio.Subprocess({
+                        argv: ['gnome-control-center', 'bluetooth'],
+                        flags: Gio.SubprocessFlags.NONE,
+                    });
+                    subprocess.init(null);
+                }
+            });
 
             this.menu.addMenuItem(item);
         }
@@ -306,7 +339,19 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         );
     }
 
+    _restartPolling() {
+        if (this._pollSourceId) {
+            GLib.source_remove(this._pollSourceId);
+            this._pollSourceId = null;
+        }
+        this._startPolling();
+    }
+
     destroy() {
+        if (this._settingsChangedId) {
+            this._settings.disconnect(this._settingsChangedId);
+            this._settingsChangedId = null;
+        }
         if (this._pollSourceId) {
             GLib.source_remove(this._pollSourceId);
             this._pollSourceId = null;
@@ -314,6 +359,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         for (const {obj, id} of this._signalIds)
             obj.disconnect(id);
         this._signalIds = [];
+        this._proxyCache.clear();
         super.destroy();
     }
 });
@@ -321,7 +367,19 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
 export default class BluetoothBatteryMonitorExtension extends Extension {
     enable() {
         this._indicator = new BluetoothBatteryIndicator(this);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+
+        const quickSettings = Main.panel.statusArea.quickSettings;
+        let position = 0;
+
+        if (quickSettings) {
+            const rightBox = Main.panel._rightBox;
+            const children = rightBox.get_children();
+            const qsIndex = children.indexOf(quickSettings.container);
+            if (qsIndex >= 0)
+                position = qsIndex;
+        }
+
+        Main.panel.addToStatusArea(this.uuid, this._indicator, position);
     }
 
     disable() {

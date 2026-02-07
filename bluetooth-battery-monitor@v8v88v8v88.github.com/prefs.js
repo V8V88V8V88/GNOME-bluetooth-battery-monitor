@@ -12,23 +12,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup();
         page.add(group);
 
-        const showBatterySwitch = new Gtk.Switch({
-            active: settings.get_boolean('show-battery-percentage'),
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind(
-            'show-battery-percentage',
-            showBatterySwitch,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const showBatteryRow = new Adw.ActionRow({
-            title: 'Show Battery Percentage',
-            activatable_widget: showBatterySwitch,
-        });
-        showBatteryRow.add_suffix(showBatterySwitch);
-        group.add(showBatteryRow);
-
         const updateIntervalSpinButton = new Gtk.SpinButton({
             adjustment: new Gtk.Adjustment({
                 lower: 1,
