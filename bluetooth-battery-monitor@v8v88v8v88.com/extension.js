@@ -111,7 +111,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
     _init(extensionObj) {
         super._init(0.0, 'Bluetooth Battery Monitor');
 
-        this._extensionObj = extensionObj;
         this._settings = extensionObj.getSettings();
         this._primaryPercentage = -1;
         this._panelFg = [1, 1, 1];
@@ -161,14 +160,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this._settingsChangedId = this._settings.connect('changed::update-interval', () => {
             this._restartPolling();
         });
-    }
-
-    _resolvePanelFg() {
-        const themeNode = this._percentLabel.get_theme_node();
-        if (themeNode) {
-            const color = themeNode.get_foreground_color();
-            this._panelFg = [color.red / 255, color.green / 255, color.blue / 255];
-        }
     }
 
     _setupUPowerProxy() {
@@ -270,7 +261,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         }
 
         this.visible = true;
-        this._resolvePanelFg();
 
         const lowest = devices.reduce((a, b) =>
             a.percentage <= b.percentage ? a : b);
@@ -360,6 +350,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             obj.disconnect(id);
         this._signalIds = [];
         this._proxyCache.clear();
+        this._upower = null;
         super.destroy();
     }
 });
