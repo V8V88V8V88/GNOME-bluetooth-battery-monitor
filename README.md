@@ -14,7 +14,7 @@ A GNOME Shell extension that shows battery levels of connected Bluetooth devices
 
 ### From GNOME Extensions
 
-Install from [extensions.gnome.org](https://extensions.gnome.org/extension/TODO/).
+Install from [extensions.gnome.org](https://extensions.gnome.org/extension/9308/bluetooth-battery-monitor/).
 
 ### Manual
 
