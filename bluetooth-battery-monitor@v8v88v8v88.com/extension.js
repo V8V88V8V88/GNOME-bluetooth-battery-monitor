@@ -8,7 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const UPOWER_BUS = 'org.freedesktop.UPower';
 const UPOWER_PATH = '/org/freedesktop/UPower';
@@ -107,253 +107,248 @@ function drawBatteryHorizontal(cr, width, height, percentage, panelFg) {
 }
 
 const BluetoothBatteryIndicator = GObject.registerClass(
-class BluetoothBatteryIndicator extends PanelMenu.Button {
-    _init(extensionObj) {
-        super._init(0.0, 'Bluetooth Battery Monitor');
+    class BluetoothBatteryIndicator extends PanelMenu.Button {
+        _init(extensionObj) {
+            super._init(0.0, 'Bluetooth Battery Monitor');
 
-        this._settings = extensionObj.getSettings();
-        this._primaryPercentage = -1;
-        this._panelFg = [1, 1, 1];
-        this._proxyCache = new Map();
+            this._settings = extensionObj.getSettings();
+            this._primaryPercentage = -1;
+            this._panelFg = [1, 1, 1];
+            this._proxyCache = new Map();
 
-        this._box = new St.BoxLayout({
-            style_class: 'panel-status-indicators-box',
-        });
-        this.add_child(this._box);
-
-        this._btIcon = new St.Icon({
-            icon_name: 'bluetooth-active-symbolic',
-            style_class: 'system-status-icon bluetooth-battery-bt-icon',
-        });
-        this._box.add_child(this._btIcon);
-
-        this._batteryIcon = new St.DrawingArea({
-            y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'bluetooth-battery-vertical-icon',
-        });
-        this._batteryIcon.set_size(10, 16);
-        this._batteryIcon.connect('repaint', (area) => {
-            const cr = area.get_context();
-            const [w, h] = area.get_surface_size();
-            drawBatteryVertical(cr, w, h, this._primaryPercentage, this._panelFg);
-            cr.$dispose();
-        });
-        this._box.add_child(this._batteryIcon);
-
-        this._percentLabel = new St.Label({
-            y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'bluetooth-battery-panel-label',
-            visible: false,
-        });
-        this._box.add_child(this._percentLabel);
-
-        this.connect('notify::hover', () => {
-            if (this._primaryPercentage >= 0)
-                this._percentLabel.visible = this.hover;
-        });
-
-        this._signalIds = [];
-        this._setupUPowerProxy();
-        this._refresh();
-        this._startPolling();
-
-        this._settingsChangedId = this._settings.connect('changed::update-interval', () => {
-            this._restartPolling();
-        });
-    }
-
-    _setupUPowerProxy() {
-        this._upower = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SYSTEM,
-            Gio.DBusProxyFlags.NONE,
-            null,
-            UPOWER_BUS,
-            UPOWER_PATH,
-            UPOWER_IFACE,
-            null,
-        );
-
-        const id = this._upower.connect('g-signal', (_proxy, _sender, signal) => {
-            if (signal === 'DeviceAdded' || signal === 'DeviceRemoved') {
-                this._proxyCache.clear();
-                this._refresh();
-            }
-        });
-        this._signalIds.push({obj: this._upower, id});
-    }
-
-    _enumerateDevices() {
-        try {
-            const result = this._upower.call_sync(
-                'EnumerateDevices',
-                null,
-                Gio.DBusCallFlags.NONE,
-                -1,
-                null,
-            );
-            return result.deep_unpack()[0];
-        } catch (e) {
-            console.error(`BluetoothBatteryMonitor: ${e.message}`);
-            return [];
-        }
-    }
-
-    _getPropertiesProxy(objectPath) {
-        let proxy = this._proxyCache.get(objectPath);
-        if (proxy)
-            return proxy;
-
-        proxy = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SYSTEM,
-            Gio.DBusProxyFlags.NONE,
-            null,
-            UPOWER_BUS,
-            objectPath,
-            PROPERTIES_IFACE,
-            null,
-        );
-        this._proxyCache.set(objectPath, proxy);
-        return proxy;
-    }
-
-    _getDeviceProperties(objectPath) {
-        try {
-            const proxy = this._getPropertiesProxy(objectPath);
-            const result = proxy.call_sync(
-                'GetAll',
-                new GLib.Variant('(s)', [DEVICE_IFACE]),
-                Gio.DBusCallFlags.NONE,
-                -1,
-                null,
-            );
-
-            const props = result.deep_unpack()[0];
-            return {
-                type: props['Type']?.deep_unpack(),
-                model: props['Model']?.deep_unpack() || 'Unknown Device',
-                percentage: props['Percentage']?.deep_unpack() || 0,
-                isPresent: props['IsPresent']?.deep_unpack() || false,
-            };
-        } catch (_e) {
-            this._proxyCache.delete(objectPath);
-            return null;
-        }
-    }
-
-    _refresh() {
-        this.menu.removeAll();
-
-        const devicePaths = this._enumerateDevices();
-        const devices = [];
-
-        for (const path of devicePaths) {
-            const props = this._getDeviceProperties(path);
-            if (!props || !props.isPresent)
-                continue;
-            if (props.type === DEVICE_TYPE_LINE_POWER || props.type === DEVICE_TYPE_BATTERY)
-                continue;
-            devices.push(props);
-        }
-
-        if (devices.length === 0) {
-            this.visible = false;
-            return;
-        }
-
-        this.visible = true;
-
-        const lowest = devices.reduce((a, b) =>
-            a.percentage <= b.percentage ? a : b);
-        this._primaryPercentage = Math.round(lowest.percentage);
-
-        this._percentLabel.text = `${this._primaryPercentage}%`;
-        this._percentLabel.visible = this.hover;
-        this._batteryIcon.queue_repaint();
-
-        for (const dev of devices) {
-            const pct = Math.round(dev.percentage);
-            const item = new PopupMenu.PopupBaseMenuItem();
-
-            const nameLabel = new St.Label({
-                text: dev.model,
-                y_align: Clutter.ActorAlign.CENTER,
-                x_expand: true,
+            this._box = new St.BoxLayout({
+                style_class: 'panel-status-indicators-box',
             });
-            item.add_child(nameLabel);
+            this.add_child(this._box);
 
-            const batteryArea = new St.DrawingArea({
-                y_align: Clutter.ActorAlign.CENTER,
+            this._btIcon = new St.Icon({
+                icon_name: 'bluetooth-active-symbolic',
+                style_class: 'system-status-icon bluetooth-battery-bt-icon',
             });
-            batteryArea.set_size(20, 10);
-            batteryArea.connect('repaint', (area) => {
+            this._box.add_child(this._btIcon);
+
+            this._batteryIcon = new St.DrawingArea({
+                y_align: Clutter.ActorAlign.CENTER,
+                style_class: 'bluetooth-battery-vertical-icon',
+            });
+            this._batteryIcon.set_size(10, 16);
+            this._batteryIcon.connect('repaint', (area) => {
                 const cr = area.get_context();
                 const [w, h] = area.get_surface_size();
-                drawBatteryHorizontal(cr, w, h, pct, this._panelFg);
+                drawBatteryVertical(cr, w, h, this._primaryPercentage, this._panelFg);
                 cr.$dispose();
             });
-            item.add_child(batteryArea);
+            this._box.add_child(this._batteryIcon);
 
-            const pctLabel = new St.Label({
-                text: `${pct}%`,
+            this._percentLabel = new St.Label({
                 y_align: Clutter.ActorAlign.CENTER,
-                style_class: 'bluetooth-battery-menu-percent',
+                style_class: 'bluetooth-battery-panel-label',
+                visible: false,
             });
-            item.add_child(pctLabel);
+            this._box.add_child(this._percentLabel);
 
-            item.connect('activate', () => {
-                try {
-                    Gio.app_info_launch_default_for_uri(
-                        'gnome-control-center://bluetooth', null);
-                } catch (_e) {
+            this.connect('notify::hover', () => {
+                if (this._primaryPercentage >= 0)
+                    this._percentLabel.visible = this.hover;
+            });
+
+            this._signalIds = [];
+            this._setupUPowerProxy();
+            this._refresh();
+            this._startPolling();
+
+            this._settingsChangedId = this._settings.connect('changed::update-interval', () => {
+                this._restartPolling();
+            });
+        }
+
+        _setupUPowerProxy() {
+            this._upower = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM,
+                Gio.DBusProxyFlags.NONE,
+                null,
+                UPOWER_BUS,
+                UPOWER_PATH,
+                UPOWER_IFACE,
+                null,
+            );
+
+            const id = this._upower.connect('g-signal', (_proxy, _sender, signal) => {
+                if (signal === 'DeviceAdded' || signal === 'DeviceRemoved') {
+                    this._proxyCache.clear();
+                    this._refresh();
+                }
+            });
+            this._signalIds.push({ obj: this._upower, id });
+        }
+
+        _enumerateDevices() {
+            try {
+                const result = this._upower.call_sync(
+                    'EnumerateDevices',
+                    null,
+                    Gio.DBusCallFlags.NONE,
+                    -1,
+                    null,
+                );
+                return result.deep_unpack()[0];
+            } catch (e) {
+                console.error(`BluetoothBatteryMonitor: ${e.message}`);
+                return [];
+            }
+        }
+
+        _getPropertiesProxy(objectPath) {
+            let proxy = this._proxyCache.get(objectPath);
+            if (proxy)
+                return proxy;
+
+            proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM,
+                Gio.DBusProxyFlags.NONE,
+                null,
+                UPOWER_BUS,
+                objectPath,
+                PROPERTIES_IFACE,
+                null,
+            );
+            this._proxyCache.set(objectPath, proxy);
+            return proxy;
+        }
+
+        _getDeviceProperties(objectPath) {
+            try {
+                const proxy = this._getPropertiesProxy(objectPath);
+                const result = proxy.call_sync(
+                    'GetAll',
+                    new GLib.Variant('(s)', [DEVICE_IFACE]),
+                    Gio.DBusCallFlags.NONE,
+                    -1,
+                    null,
+                );
+
+                const props = result.deep_unpack()[0];
+                return {
+                    type: props['Type']?.deep_unpack(),
+                    model: props['Model']?.deep_unpack() || 'Unknown Device',
+                    percentage: props['Percentage']?.deep_unpack() || 0,
+                    isPresent: props['IsPresent']?.deep_unpack() || false,
+                };
+            } catch (_e) {
+                this._proxyCache.delete(objectPath);
+                return null;
+            }
+        }
+
+        _refresh() {
+            this.menu.removeAll();
+
+            const devicePaths = this._enumerateDevices();
+            const devices = [];
+
+            for (const path of devicePaths) {
+                const props = this._getDeviceProperties(path);
+                if (!props || !props.isPresent)
+                    continue;
+                if (props.type === DEVICE_TYPE_LINE_POWER || props.type === DEVICE_TYPE_BATTERY)
+                    continue;
+                devices.push(props);
+            }
+
+            if (devices.length === 0) {
+                this.visible = false;
+                return;
+            }
+
+            this.visible = true;
+
+            const lowest = devices.reduce((a, b) =>
+                a.percentage <= b.percentage ? a : b);
+            this._primaryPercentage = Math.round(lowest.percentage);
+
+            this._percentLabel.text = `${this._primaryPercentage}%`;
+            this._percentLabel.visible = this.hover;
+            this._batteryIcon.queue_repaint();
+
+            for (const dev of devices) {
+                const pct = Math.round(dev.percentage);
+                const item = new PopupMenu.PopupBaseMenuItem();
+
+                const nameLabel = new St.Label({
+                    text: dev.model,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    x_expand: true,
+                });
+                item.add_child(nameLabel);
+
+                const batteryArea = new St.DrawingArea({
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                batteryArea.set_size(20, 10);
+                batteryArea.connect('repaint', (area) => {
+                    const cr = area.get_context();
+                    const [w, h] = area.get_surface_size();
+                    drawBatteryHorizontal(cr, w, h, pct, this._panelFg);
+                    cr.$dispose();
+                });
+                item.add_child(batteryArea);
+
+                const pctLabel = new St.Label({
+                    text: `${pct}%`,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    style_class: 'bluetooth-battery-menu-percent',
+                });
+                item.add_child(pctLabel);
+
+                item.connect('activate', () => {
                     const subprocess = new Gio.Subprocess({
                         argv: ['gnome-control-center', 'bluetooth'],
                         flags: Gio.SubprocessFlags.NONE,
                     });
                     subprocess.init(null);
-                }
-            });
+                });
 
-            this.menu.addMenuItem(item);
+                this.menu.addMenuItem(item);
+            }
         }
-    }
 
-    _startPolling() {
-        const interval = this._settings.get_int('update-interval') * 60;
-        this._pollSourceId = GLib.timeout_add_seconds(
-            GLib.PRIORITY_DEFAULT,
-            interval,
-            () => {
-                this._refresh();
-                return GLib.SOURCE_CONTINUE;
-            },
-        );
-    }
+        _startPolling() {
+            const interval = this._settings.get_int('update-interval') * 60;
+            this._pollSourceId = GLib.timeout_add_seconds(
+                GLib.PRIORITY_DEFAULT,
+                interval,
+                () => {
+                    this._refresh();
+                    return GLib.SOURCE_CONTINUE;
+                },
+            );
+        }
 
-    _restartPolling() {
-        if (this._pollSourceId) {
-            GLib.source_remove(this._pollSourceId);
-            this._pollSourceId = null;
+        _restartPolling() {
+            if (this._pollSourceId) {
+                GLib.source_remove(this._pollSourceId);
+                this._pollSourceId = null;
+            }
+            this._startPolling();
         }
-        this._startPolling();
-    }
 
-    destroy() {
-        if (this._settingsChangedId) {
-            this._settings.disconnect(this._settingsChangedId);
-            this._settingsChangedId = null;
+        destroy() {
+            if (this._settingsChangedId) {
+                this._settings.disconnect(this._settingsChangedId);
+                this._settingsChangedId = null;
+            }
+            if (this._pollSourceId) {
+                GLib.source_remove(this._pollSourceId);
+                this._pollSourceId = null;
+            }
+            for (const { obj, id } of this._signalIds)
+                obj.disconnect(id);
+            this._signalIds = [];
+            this._proxyCache.clear();
+            this._upower = null;
+            super.destroy();
         }
-        if (this._pollSourceId) {
-            GLib.source_remove(this._pollSourceId);
-            this._pollSourceId = null;
-        }
-        for (const {obj, id} of this._signalIds)
-            obj.disconnect(id);
-        this._signalIds = [];
-        this._proxyCache.clear();
-        this._upower = null;
-        super.destroy();
-    }
-});
+    });
 
 export default class BluetoothBatteryMonitorExtension extends Extension {
     enable() {

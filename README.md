@@ -21,9 +21,9 @@ Install from [extensions.gnome.org](https://extensions.gnome.org/extension/TODO/
 ```bash
 git clone https://github.com/V8V88V8V88/GNOME-bluetooth-battery-monitor.git
 cd GNOME-bluetooth-battery-monitor
+mkdir -p ~/.local/share/gnome-shell/extensions/
 cp -r bluetooth-battery-monitor@v8v88v8v88.com ~/.local/share/gnome-shell/extensions/
-cd ~/.local/share/gnome-shell/extensions/bluetooth-battery-monitor@v8v88v8v88.com/schemas
-glib-compile-schemas .
+glib-compile-schemas ~/.local/share/gnome-shell/extensions/bluetooth-battery-monitor@v8v88v8v88.com/schemas/
 ```
 
 Then restart GNOME Shell (log out and back in on Wayland) and enable the extension:
