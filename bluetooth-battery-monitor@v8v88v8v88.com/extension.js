@@ -117,6 +117,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._proxyCache = new Map();
             this._bluetoothIndicator = null;
             this._bluetoothIndicatorVisible = null;
+            this._bluetoothIndicatorSignalId = null;
 
             this._box = new St.BoxLayout({
                 style_class: 'panel-status-indicators-box',
@@ -194,6 +195,17 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                 return;
             const hide = this._settings.get_boolean('hide-original-bluetooth-icon');
             this._bluetoothIndicator.visible = !hide;
+            if (hide) {
+                if (!this._bluetoothIndicatorSignalId) {
+                    this._bluetoothIndicatorSignalId = this._bluetoothIndicator.connect('notify::visible', () => {
+                        if (this._settings.get_boolean('hide-original-bluetooth-icon') && this._bluetoothIndicator.visible)
+                            this._bluetoothIndicator.visible = false;
+                    });
+                }
+            } else if (this._bluetoothIndicatorSignalId) {
+                this._bluetoothIndicator.disconnect(this._bluetoothIndicatorSignalId);
+                this._bluetoothIndicatorSignalId = null;
+            }
         }
 
         _setupUPowerProxy() {
@@ -379,6 +391,10 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             if (this._bluetoothVisibilityId) {
                 this._settings.disconnect(this._bluetoothVisibilityId);
                 this._bluetoothVisibilityId = null;
+            }
+            if (this._bluetoothIndicator && this._bluetoothIndicatorSignalId) {
+                this._bluetoothIndicator.disconnect(this._bluetoothIndicatorSignalId);
+                this._bluetoothIndicatorSignalId = null;
             }
             if (this._bluetoothIndicator && this._bluetoothIndicatorVisible !== null)
                 this._bluetoothIndicator.visible = this._bluetoothIndicatorVisible;
