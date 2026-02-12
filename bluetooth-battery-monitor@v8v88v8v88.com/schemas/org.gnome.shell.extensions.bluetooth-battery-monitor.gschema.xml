@@ -6,5 +6,15 @@
       <summary>Update interval</summary>
       <description>How often to update the battery levels (in minutes)</description>
     </key>
+    <key name="show-hover-percentage" type="b">
+      <default>true</default>
+      <summary>Show percentage on hover</summary>
+      <description>When enabled, hovering over the panel icon shows the battery percentage. Ignored when "Always show percentage" is on. Disable to avoid layout shifts when multiple icons are in the panel.</description>
+    </key>
+    <key name="always-show-percentage" type="b">
+      <default>false</default>
+      <summary>Always show percentage</summary>
+      <description>When enabled, the battery percentage is always visible in the panel, without needing to hover.</description>
+    </key>
   </schema>
 </schemalist>

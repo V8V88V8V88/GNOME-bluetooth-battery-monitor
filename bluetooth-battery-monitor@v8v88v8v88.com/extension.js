@@ -149,7 +149,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
 
             this.connect('notify::hover', () => {
                 if (this._primaryPercentage >= 0)
-                    this._percentLabel.visible = this.hover;
+                    this._updatePercentVisibility();
             });
 
             this._signalIds = [];
@@ -160,6 +160,18 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._settingsChangedId = this._settings.connect('changed::update-interval', () => {
                 this._restartPolling();
             });
+            this._percentVisibilityIds = [
+                this._settings.connect('changed::show-hover-percentage', () => this._updatePercentVisibility()),
+                this._settings.connect('changed::always-show-percentage', () => this._updatePercentVisibility()),
+            ];
+        }
+
+        _updatePercentVisibility() {
+            if (this._primaryPercentage < 0)
+                return;
+            const always = this._settings.get_boolean('always-show-percentage');
+            const hover = this._settings.get_boolean('show-hover-percentage');
+            this._percentLabel.visible = always || (hover && this.hover);
         }
 
         _setupUPowerProxy() {
@@ -267,7 +279,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._primaryPercentage = Math.round(lowest.percentage);
 
             this._percentLabel.text = `${this._primaryPercentage}%`;
-            this._percentLabel.visible = this.hover;
+            this._updatePercentVisibility();
             this._batteryIcon.queue_repaint();
 
             for (const dev of devices) {
@@ -336,6 +348,11 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             if (this._settingsChangedId) {
                 this._settings.disconnect(this._settingsChangedId);
                 this._settingsChangedId = null;
+            }
+            if (this._percentVisibilityIds) {
+                for (const id of this._percentVisibilityIds)
+                    this._settings.disconnect(id);
+                this._percentVisibilityIds = null;
             }
             if (this._pollSourceId) {
                 GLib.source_remove(this._pollSourceId);

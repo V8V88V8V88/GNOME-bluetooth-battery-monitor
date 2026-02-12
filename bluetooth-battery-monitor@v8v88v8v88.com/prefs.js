@@ -35,6 +35,46 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         updateIntervalRow.add_suffix(updateIntervalSpinButton);
         group.add(updateIntervalRow);
 
+        const alwaysShowSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'always-show-percentage',
+            alwaysShowSwitch,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const alwaysShowRow = new Adw.ActionRow({
+            title: 'Always show percentage',
+            subtitle: 'Keep the battery percentage always visible in the panel',
+            activatable_widget: alwaysShowSwitch,
+        });
+        alwaysShowRow.add_suffix(alwaysShowSwitch);
+        group.add(alwaysShowRow);
+
+        const showHoverSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'show-hover-percentage',
+            showHoverSwitch,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const showHoverRow = new Adw.ActionRow({
+            title: 'Show percentage on hover',
+            subtitle: 'When "Always show" is off: show percentage on hover. Disable to prevent layout shifts.',
+            activatable_widget: showHoverSwitch,
+        });
+        showHoverRow.add_suffix(showHoverSwitch);
+        group.add(showHoverRow);
+
+        const updateHoverSensitivity = () => {
+            showHoverRow.sensitive = !settings.get_boolean('always-show-percentage');
+        };
+        updateHoverSensitivity();
+        settings.connect('changed::always-show-percentage', updateHoverSensitivity);
+
         window.add(page);
     }
 }
