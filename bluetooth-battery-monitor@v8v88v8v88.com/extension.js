@@ -115,6 +115,8 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._primaryPercentage = -1;
             this._panelFg = [1, 1, 1];
             this._proxyCache = new Map();
+            this._bluetoothIndicator = null;
+            this._bluetoothIndicatorVisible = null;
 
             this._box = new St.BoxLayout({
                 style_class: 'panel-status-indicators-box',
@@ -164,6 +166,19 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                 this._settings.connect('changed::show-hover-percentage', () => this._updatePercentVisibility()),
                 this._settings.connect('changed::always-show-percentage', () => this._updatePercentVisibility()),
             ];
+
+            const quickSettings = Main.panel.statusArea.quickSettings;
+            const bluetooth = quickSettings?._bluetooth;
+            const indicatorActor = bluetooth?._indicator ?? bluetooth?.container ?? null;
+            if (indicatorActor) {
+                this._bluetoothIndicator = indicatorActor;
+                this._bluetoothIndicatorVisible = this._bluetoothIndicator.visible;
+                this._updateBluetoothIconVisibility();
+                this._bluetoothVisibilityId = this._settings.connect(
+                    'changed::hide-original-bluetooth-icon',
+                    () => this._updateBluetoothIconVisibility(),
+                );
+            }
         }
 
         _updatePercentVisibility() {
@@ -172,6 +187,13 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             const always = this._settings.get_boolean('always-show-percentage');
             const hover = this._settings.get_boolean('show-hover-percentage');
             this._percentLabel.visible = always || (hover && this.hover);
+        }
+
+        _updateBluetoothIconVisibility() {
+            if (!this._bluetoothIndicator)
+                return;
+            const hide = this._settings.get_boolean('hide-original-bluetooth-icon');
+            this._bluetoothIndicator.visible = !hide;
         }
 
         _setupUPowerProxy() {
@@ -354,6 +376,13 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                     this._settings.disconnect(id);
                 this._percentVisibilityIds = null;
             }
+            if (this._bluetoothVisibilityId) {
+                this._settings.disconnect(this._bluetoothVisibilityId);
+                this._bluetoothVisibilityId = null;
+            }
+            if (this._bluetoothIndicator && this._bluetoothIndicatorVisible !== null)
+                this._bluetoothIndicator.visible = this._bluetoothIndicatorVisible;
+
             if (this._pollSourceId) {
                 GLib.source_remove(this._pollSourceId);
                 this._pollSourceId = null;

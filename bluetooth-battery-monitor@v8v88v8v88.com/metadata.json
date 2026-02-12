@@ -11,7 +11,7 @@
     ],
     "settings-schema": "org.gnome.shell.extensions.bluetooth-battery-monitor",
     "url": "https://github.com/V8V88V8V88/GNOME-bluetooth-battery-monitor",
-    "version": 5,
+    "version": 6,
     "donations": {
         "paypal": "v8pay",
         "kofi": "v8v88v8v88",

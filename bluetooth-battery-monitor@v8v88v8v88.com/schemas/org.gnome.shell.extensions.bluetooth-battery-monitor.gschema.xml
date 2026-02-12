@@ -16,5 +16,10 @@
       <summary>Always show percentage</summary>
       <description>When enabled, the battery percentage is always visible in the panel, without needing to hover.</description>
     </key>
+    <key name="hide-original-bluetooth-icon" type="b">
+      <default>true</default>
+      <summary>Hide original Bluetooth icon</summary>
+      <description>When enabled, hides the built-in Bluetooth status icon so that only this extension's icon is shown.</description>
+    </key>
   </schema>
 </schemalist>

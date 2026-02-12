@@ -75,6 +75,23 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         updateHoverSensitivity();
         settings.connect('changed::always-show-percentage', updateHoverSensitivity);
 
+        const hideOriginalSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'hide-original-bluetooth-icon',
+            hideOriginalSwitch,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const hideOriginalRow = new Adw.ActionRow({
+            title: 'Hide original Bluetooth icon',
+            subtitle: 'Hide the built-in Bluetooth status icon and only show this extension',
+            activatable_widget: hideOriginalSwitch,
+        });
+        hideOriginalRow.add_suffix(hideOriginalSwitch);
+        group.add(hideOriginalRow);
+
         window.add(page);
     }
 }

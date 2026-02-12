@@ -8,6 +8,7 @@ A GNOME Shell extension that shows battery levels of connected Bluetooth devices
 - Color-coded fill: green (>50%), yellow (>20%), red (<=20%)
 - Hover to see the exact percentage (can be disabled to avoid layout shifts)
 - Option to always show percentage in the panel
+- Option to hide the original Bluetooth icon so only this extension's icon is shown
 - Click to see all connected devices with individual battery levels
 - Configurable polling interval (1-60 minutes)
 
@@ -15,14 +16,17 @@ A GNOME Shell extension that shows battery levels of connected Bluetooth devices
 
 ### From GNOME Extensions
 
-Install from [extensions.gnome.org](https://extensions.gnome.org/extension/9308/bluetooth-battery-monitor/).
+[<img src="https://raw.githubusercontent.com/andyholmes/gnome-shell-extensions-badge/master/get-it-on-ego.svg?sanitize=true" height="100">](https://extensions.gnome.org/away/https%253A%252F%252Fgithub.com%252FV8V88V8V88%252FGNOME-bluetooth-battery-monitor)
 
 ### Manual
 
 ```bash
 git clone https://github.com/V8V88V8V88/GNOME-bluetooth-battery-monitor.git
+
 cd GNOME-bluetooth-battery-monitor
+
 mkdir -p ~/.local/share/gnome-shell/extensions/
+
 cp -r bluetooth-battery-monitor@v8v88v8v88.com ~/.local/share/gnome-shell/extensions/
 glib-compile-schemas ~/.local/share/gnome-shell/extensions/bluetooth-battery-monitor@v8v88v8v88.com/schemas/
 ```
