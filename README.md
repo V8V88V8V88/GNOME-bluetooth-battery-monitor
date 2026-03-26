@@ -39,7 +39,7 @@ gnome-extensions enable bluetooth-battery-monitor@v8v88v8v88.com
 
 ## Supported GNOME Versions
 
-45, 46, 47, 48, 49
+45, 46, 47, 48, 49, 50
 
 ## How It Works
 
