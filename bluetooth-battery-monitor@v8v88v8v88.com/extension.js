@@ -16,8 +16,133 @@ const UPOWER_IFACE = 'org.freedesktop.UPower';
 const DEVICE_IFACE = 'org.freedesktop.UPower.Device';
 const PROPERTIES_IFACE = 'org.freedesktop.DBus.Properties';
 
+const BLUEZ_BUS = 'org.bluez';
+const BLUEZ_ROOT = '/';
+const OBJECT_MANAGER_IFACE = 'org.freedesktop.DBus.ObjectManager';
+const BLUEZ_DEVICE_IFACE = 'org.bluez.Device1';
+
 const DEVICE_TYPE_LINE_POWER = 1;
 const DEVICE_TYPE_BATTERY = 2;
+
+const MAJOR_AUDIO = 0x04;
+const MAJOR_PERIPHERAL = 0x05;
+const MINOR_HEADPHONES = 0x01;
+const MINOR_LOUDSPEAKER = 0x04;
+const MINOR_HEADSET = 0x05;
+const MINOR_GAMEPAD = 0x04;
+
+const DEVICE_ICONS = {
+    headphone: 'audio-headphones-symbolic',
+    speaker: 'audio-speakers-symbolic',
+    controller: 'input-gaming-symbolic',
+    mouse: 'input-mouse-symbolic',
+    keyboard: 'input-keyboard-symbolic',
+    phone: 'phone-symbolic',
+    tv: 'video-display-symbolic',
+    tablet: 'computer-symbolic',
+    watch: 'preferences-system-time-symbolic',
+    car: 'bluetooth-active-symbolic',
+    unknown: 'bluetooth-active-symbolic',
+};
+
+const NAME_KEYWORDS = {
+    controller: [
+        'controller', 'gamepad', 'joystick',
+        'xbox', 'playstation', 'dualshock', 'dualsense',
+        'wireless controller', 'nintendo joy', 'pro controller',
+        'steam deck', '8bitdo', 'gamesir',
+        'razer wolverine', 'razer raiju', 'thrustmaster',
+    ],
+    speaker: [
+        'speaker', 'soundbar', 'xsound', 'tribit',
+        'jbl flip', 'jbl charge', 'jbl xtreme', 'jbl clip',
+        'jbl go', 'jbl link', 'jbl partybox', 'jbl boombox',
+        'bose soundlink', 'bose revolve', 'anker soundcore',
+        'ue boom', 'ue megaboom',
+        'marshall emberton', 'marshall stockwell', 'marshall kilburn',
+        'harman kardon', 'edifier', 'creative', 'bang olufsen',
+        'w-king', 'doss', 'otium', 'comiso',
+        'go speaker', 'wireless speaker', 'portable speaker',
+        'sony srs', 'logitech z',
+    ],
+    headphone: [
+        'headphone', 'headset', 'earphone', 'earbud',
+        'airpod', 'galaxy bud', 'pixel bud',
+        'jabra elite', 'sennheiser', 'audio technica',
+        'beats', 'skullcandy', 'hyperx cloud',
+        'razer kraken', 'razer barracuda',
+        'sony wh-', 'sony wf-',
+        'bose qc', 'bose nc',
+        'jbl tune', 'jbl live', 'jbl reflect',
+        'nothing ear',
+        'oneplus bud', 'realme bud', 'oppo enco',
+        'boat rockerz', 'boat airdopes', 'boat bass',
+        'noise buds', 'noise ear',
+        'poco bud',
+        'soundcore', 'logitech g pro',
+    ],
+    mouse: [
+        'mouse', 'mice', 'trackball',
+        'logitech m', 'mx master', 'mx anywhere',
+        'm185', 'm221', 'm330', 'm337', 'm720',
+        'microsoft arc mouse', 'razer deathadder', 'hp z3700',
+        'wireless mouse', 'bluetooth mouse',
+    ],
+    keyboard: [
+        'keyboard', 'keypad',
+        'k380', 'k480', 'k780', 'k400',
+        'mx keys', 'magic keyboard', 'logitech k',
+        'microsoft surface keyboard', 'keychron',
+        'wireless keyboard', 'bluetooth keyboard',
+    ],
+    phone: [
+        'phone', 'iphone', 'android', 'smartphone', 'mobile',
+        'galaxy s', 'galaxy a', 'galaxy z', 'galaxy note',
+        'pixel ', 'oneplus', 'oppo', 'vivo', 'realme',
+        'redmi', 'xiaomi', 'motorola', 'nokia',
+        'asus rog phone', 'samsung galaxy',
+        'poco', 'iqoo', 'infinix', 'tecno', 'honor',
+    ],
+    tv: [
+        'tv', 'television',
+        'roku', 'fire tv', 'fire stick',
+        'android tv', 'smart tv',
+        'chromecast', 'apple tv',
+        'mi tv', 'hisense',
+    ],
+    tablet: [
+        'tablet', 'ipad', 'galaxy tab',
+        'surface go', 'surface pro',
+        'kindle', 'amazon fire',
+    ],
+    watch: [
+        'watch', 'wear os',
+        'galaxy watch', 'apple watch',
+        'fitbit', 'garmin', 'amazfit',
+        'xiaomi watch', 'mi band',
+        'smartwatch',
+        'huawei watch', 'oppo watch', 'oneplus watch',
+        'fossil gen',
+    ],
+    car: [
+        'car', 'automotive', 'vehicle',
+        'bmw', 'tesla', 'ford', 'toyota',
+        'honda', 'hyundai', 'maruti',
+    ],
+};
+
+const NAME_TYPE_ORDER = [
+    'controller',
+    'speaker',
+    'headphone',
+    'mouse',
+    'keyboard',
+    'phone',
+    'tv',
+    'tablet',
+    'watch',
+    'car',
+];
 
 function drawBatteryVertical(cr, width, height, percentage, panelFg) {
     const pct = Math.max(0, Math.min(100, percentage));
@@ -106,6 +231,85 @@ function drawBatteryHorizontal(cr, width, height, percentage, panelFg) {
     cr.fill();
 }
 
+function macFromUPowerPath(path) {
+    const match = path.match(/_dev_([0-9a-fA-F]{2}_[0-9a-fA-F]{2}_[0-9a-fA-F]{2}_[0-9a-fA-F]{2}_[0-9a-fA-F]{2}_[0-9a-fA-F]{2})$/i)
+        || path.match(/bluetooth_([0-9a-fA-F_]{17})$/i);
+    if (!match)
+        return null;
+    return match[1].replace(/_/g, ':').toLowerCase();
+}
+
+function deviceTypeFromBlueZ(cod, icon) {
+    if (icon) {
+        const i = icon.toLowerCase();
+        if (i.includes('speaker') || i.includes('audio-card'))
+            return 'speaker';
+        if (i.includes('headphone') || i.includes('headset'))
+            return 'headphone';
+        if (i.includes('gaming') || i.includes('gamepad') || i.includes('joystick'))
+            return 'controller';
+        if (i.includes('mouse') || i.includes('input-mouse'))
+            return 'mouse';
+        if (i.includes('keyboard') || i.includes('input-keyboard'))
+            return 'keyboard';
+        if (i.includes('phone') || i.includes('smartphone'))
+            return 'phone';
+        if (i.includes('video') || i.includes('display') || i.includes('tv'))
+            return 'tv';
+        if (i.includes('tablet'))
+            return 'tablet';
+        if (i.includes('watch') || i.includes('wearable'))
+            return 'watch';
+    }
+    if (cod !== undefined && cod !== null) {
+        const major = (cod >> 8) & 0x1f;
+        const minor = (cod >> 2) & 0x3f;
+        if (major === MAJOR_PERIPHERAL && minor === MINOR_GAMEPAD)
+            return 'controller';
+        if (major === MAJOR_AUDIO) {
+            if (minor === MINOR_LOUDSPEAKER)
+                return 'speaker';
+            if (minor === MINOR_HEADPHONES || minor === MINOR_HEADSET || minor >= 0x05 && minor <= 0x07)
+                return 'headphone';
+        }
+    }
+    return null;
+}
+
+function deviceTypeFromName(model) {
+    if (!model)
+        return null;
+    const m = model.toLowerCase();
+
+    for (const type of NAME_TYPE_ORDER) {
+        const keywords = NAME_KEYWORDS[type];
+        if (keywords?.some(k => m.includes(k)))
+            return type;
+    }
+
+    return null;
+}
+
+function iconForDeviceType(type) {
+    return DEVICE_ICONS[type] || DEVICE_ICONS.headphone;
+}
+
+function deviceTypeFromOverrides(model, overrides) {
+    if (!model || !overrides || overrides.length === 0)
+        return null;
+    const m = model.toLowerCase().trim();
+    for (const entry of overrides) {
+        const idx = entry.lastIndexOf('|');
+        if (idx <= 0)
+            continue;
+        const storedModel = entry.slice(0, idx).toLowerCase().trim();
+        const storedType = entry.slice(idx + 1).trim();
+        if (storedModel && storedType && m === storedModel)
+            return storedType;
+    }
+    return null;
+}
+
 const BluetoothBatteryIndicator = GObject.registerClass(
     class BluetoothBatteryIndicator extends PanelMenu.Button {
         _init(extensionObj) {
@@ -113,8 +317,9 @@ const BluetoothBatteryIndicator = GObject.registerClass(
 
             this._settings = extensionObj.getSettings();
             this._primaryPercentage = -1;
-            this._panelFg = [1, 1, 1];
+            this._primaryDeviceType = 'unknown';
             this._proxyCache = new Map();
+            this._bluezCache = null;
             this._bluetoothIndicator = null;
             this._bluetoothIndicatorVisible = null;
             this._bluetoothIndicatorSignalId = null;
@@ -138,7 +343,10 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._batteryIcon.connect('repaint', (area) => {
                 const cr = area.get_context();
                 const [w, h] = area.get_surface_size();
-                drawBatteryVertical(cr, w, h, this._primaryPercentage, this._panelFg);
+                const themeNode = area.get_theme_node();
+                const color = themeNode.get_foreground_color();
+                const panelFg = [color.red / 255, color.green / 255, color.blue / 255];
+                drawBatteryVertical(cr, w, h, this._primaryPercentage, panelFg);
                 cr.$dispose();
             });
             this._box.add_child(this._batteryIcon);
@@ -166,6 +374,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._percentVisibilityIds = [
                 this._settings.connect('changed::show-hover-percentage', () => this._updatePercentVisibility()),
                 this._settings.connect('changed::always-show-percentage', () => this._updatePercentVisibility()),
+                this._settings.connect('changed::device-overrides', () => this._refresh()),
             ];
 
             const quickSettings = Main.panel.statusArea.quickSettings;
@@ -222,10 +431,57 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             const id = this._upower.connect('g-signal', (_proxy, _sender, signal) => {
                 if (signal === 'DeviceAdded' || signal === 'DeviceRemoved') {
                     this._proxyCache.clear();
+                    this._bluezCache = null;
                     this._refresh();
                 }
             });
             this._signalIds.push({ obj: this._upower, id });
+        }
+
+        _getBlueZDeviceMap() {
+            if (this._bluezCache)
+                return this._bluezCache;
+            const map = new Map();
+            try {
+                const proxy = Gio.DBusProxy.new_for_bus_sync(
+                    Gio.BusType.SYSTEM,
+                    Gio.DBusProxyFlags.NONE,
+                    null,
+                    BLUEZ_BUS,
+                    BLUEZ_ROOT,
+                    OBJECT_MANAGER_IFACE,
+                    null,
+                );
+                const result = proxy.call_sync(
+                    'GetManagedObjects',
+                    null,
+                    Gio.DBusCallFlags.NONE,
+                    -1,
+                    null,
+                );
+                const objects = result.deep_unpack()[0];
+                for (const path of Object.keys(objects)) {
+                    const interfaces = objects[path];
+                    const dev = interfaces?.[BLUEZ_DEVICE_IFACE];
+                    if (!dev)
+                        continue;
+                    const connected = dev.Connected?.deep_unpack?.() ?? dev.Connected;
+                    if (!connected)
+                        continue;
+                    const addr = dev.Address?.deep_unpack?.() ?? dev.Address;
+                    if (!addr)
+                        continue;
+                    const key = String(addr).toLowerCase().replace(/:/g, '_');
+                    const cod = dev.Class?.deep_unpack?.() ?? dev.Class;
+                    const icon = dev.Icon?.deep_unpack?.() ?? dev.Icon;
+                    map.set(key, { cod, icon });
+                }
+            } catch (e) {
+                if (!e.message?.includes('not found'))
+                    console.error(`BluetoothBatteryMonitor BlueZ: ${e.message}`);
+            }
+            this._bluezCache = map;
+            return map;
         }
 
         _enumerateDevices() {
@@ -279,6 +535,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                     model: props['Model']?.deep_unpack() || 'Unknown Device',
                     percentage: props['Percentage']?.deep_unpack() || 0,
                     isPresent: props['IsPresent']?.deep_unpack() || false,
+                    nativePath: objectPath,
                 };
             } catch (_e) {
                 this._proxyCache.delete(objectPath);
@@ -288,9 +545,11 @@ const BluetoothBatteryIndicator = GObject.registerClass(
 
         _refresh() {
             this.menu.removeAll();
+            this._bluezCache = null;
 
             const devicePaths = this._enumerateDevices();
             const devices = [];
+            const bluezMap = this._getBlueZDeviceMap();
 
             for (const path of devicePaths) {
                 const props = this._getDeviceProperties(path);
@@ -298,7 +557,29 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                     continue;
                 if (props.type === DEVICE_TYPE_LINE_POWER || props.type === DEVICE_TYPE_BATTERY)
                     continue;
-                devices.push(props);
+
+                const mac = macFromUPowerPath(path);
+                let deviceType = 'unknown';
+
+                const overrides = this._settings.get_strv('device-overrides');
+                const overrideType = deviceTypeFromOverrides(props.model, overrides);
+                if (overrideType) {
+                    deviceType = overrideType;
+                } else {
+                    const nameType = deviceTypeFromName(props.model);
+                    if (nameType) {
+                        deviceType = nameType;
+                    } else if (mac) {
+                        const key = mac.replace(/:/g, '_');
+                        const bluez = bluezMap.get(key);
+                        if (bluez) {
+                            const bluezType = deviceTypeFromBlueZ(bluez.cod, bluez.icon);
+                            deviceType = bluezType ?? 'headphone';
+                        }
+                    }
+                }
+
+                devices.push({ ...props, deviceType });
             }
 
             if (devices.length === 0) {
@@ -311,7 +592,9 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             const lowest = devices.reduce((a, b) =>
                 a.percentage <= b.percentage ? a : b);
             this._primaryPercentage = Math.round(lowest.percentage);
+            this._primaryDeviceType = lowest.deviceType;
 
+            this._btIcon.icon_name = iconForDeviceType(this._primaryDeviceType);
             this._percentLabel.text = `${this._primaryPercentage}%`;
             this._updatePercentVisibility();
             this._batteryIcon.queue_repaint();
@@ -319,6 +602,14 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             for (const dev of devices) {
                 const pct = Math.round(dev.percentage);
                 const item = new PopupMenu.PopupBaseMenuItem();
+
+                const typeIcon = new St.Icon({
+                    icon_name: iconForDeviceType(dev.deviceType),
+                    style_class: 'system-status-icon bluetooth-battery-menu-device-icon',
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                typeIcon.set_icon_size(16);
+                item.add_child(typeIcon);
 
                 const nameLabel = new St.Label({
                     text: dev.model,
@@ -334,7 +625,10 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                 batteryArea.connect('repaint', (area) => {
                     const cr = area.get_context();
                     const [w, h] = area.get_surface_size();
-                    drawBatteryHorizontal(cr, w, h, pct, this._panelFg);
+                    const themeNode = area.get_theme_node();
+                    const color = themeNode.get_foreground_color();
+                    const panelFg = [color.red / 255, color.green / 255, color.blue / 255];
+                    drawBatteryHorizontal(cr, w, h, pct, panelFg);
                     cr.$dispose();
                 });
                 item.add_child(batteryArea);
