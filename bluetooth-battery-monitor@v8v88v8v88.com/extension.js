@@ -315,6 +315,8 @@ const BluetoothBatteryIndicator = GObject.registerClass(
         _init(extensionObj) {
             super._init(0.0, 'Bluetooth Battery Monitor');
 
+            this.add_style_class_name('bluetooth-battery-panel-button');
+
             this._settings = extensionObj.getSettings();
             this._primaryPercentage = -1;
             this._primaryDeviceType = 'unknown';
@@ -325,7 +327,7 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             this._bluetoothIndicatorSignalId = null;
 
             this._box = new St.BoxLayout({
-                style_class: 'panel-status-indicators-box',
+                style_class: 'panel-status-indicators-box bluetooth-battery-box',
             });
             this.add_child(this._box);
 
@@ -375,6 +377,8 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                 this._settings.connect('changed::show-hover-percentage', () => this._updatePercentVisibility()),
                 this._settings.connect('changed::always-show-percentage', () => this._updatePercentVisibility()),
                 this._settings.connect('changed::device-overrides', () => this._refresh()),
+                this._settings.connect('changed::hpadding', () => this._updateStyle()),
+                this._settings.connect('changed::outer-margin', () => this._updateStyle()),
             ];
 
             const quickSettings = Main.panel.statusArea.quickSettings;
@@ -417,6 +421,12 @@ const BluetoothBatteryIndicator = GObject.registerClass(
             }
         }
 
+        _updateStyle() {
+            const hpadding = this._settings.get_int('hpadding');
+            const outerMargin = Math.max(0, this._settings.get_int('outer-margin'));
+            this.style = `-natural-hpadding: ${hpadding}px; -minimum-hpadding: ${Math.max(0, Math.floor(hpadding / 2))}px; margin-left: ${outerMargin}px; margin-right: ${outerMargin}px;`;
+        }
+
         _setupUPowerProxy() {
             this._upower = Gio.DBusProxy.new_for_bus_sync(
                 Gio.BusType.SYSTEM,
@@ -443,9 +453,27 @@ const BluetoothBatteryIndicator = GObject.registerClass(
                 return this._bluezCache;
             const map = new Map();
             try {
+                const connection = Gio.bus_get_sync(Gio.BusType.SYSTEM, null);
+                const ownerResult = connection.call_sync(
+                    'org.freedesktop.DBus',
+                    '/org/freedesktop/DBus',
+                    'org.freedesktop.DBus',
+                    'NameHasOwner',
+                    new GLib.Variant('(s)', [BLUEZ_BUS]),
+                    new GLib.VariantType('(b)'),
+                    Gio.DBusCallFlags.NONE,
+                    -1,
+                    null
+                );
+                const hasOwner = ownerResult.deep_unpack()[0];
+                if (!hasOwner) {
+                    this._bluezCache = map;
+                    return map;
+                }
+
                 const proxy = Gio.DBusProxy.new_for_bus_sync(
                     Gio.BusType.SYSTEM,
-                    Gio.DBusProxyFlags.NONE,
+                    Gio.DBusProxyFlags.DO_NOT_AUTO_START,
                     null,
                     BLUEZ_BUS,
                     BLUEZ_ROOT,
@@ -584,10 +612,12 @@ const BluetoothBatteryIndicator = GObject.registerClass(
 
             if (devices.length === 0) {
                 this.visible = false;
+                this._updateStyle();
                 return;
             }
 
             this.visible = true;
+            this._updateStyle();
 
             const lowest = devices.reduce((a, b) =>
                 a.percentage <= b.percentage ? a : b);
@@ -708,23 +738,51 @@ const BluetoothBatteryIndicator = GObject.registerClass(
 
 export default class BluetoothBatteryMonitorExtension extends Extension {
     enable() {
-        this._indicator = new BluetoothBatteryIndicator(this);
+        this._settings = this.getSettings();
+        this._positionChangedId = this._settings.connect('changed::position-box', () => this._reposition());
+        this._indexChangedId = this._settings.connect('changed::position-index', () => this._reposition());
+        this._reposition();
+    }
 
-        const quickSettings = Main.panel.statusArea.quickSettings;
-        let position = 0;
-
-        if (quickSettings) {
-            const rightBox = Main.panel._rightBox;
-            const children = rightBox.get_children();
-            const qsIndex = children.indexOf(quickSettings.container);
-            if (qsIndex >= 0)
-                position = qsIndex;
+    _reposition() {
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
         }
 
-        Main.panel.addToStatusArea(this.uuid, this._indicator, position);
+        this._indicator = new BluetoothBatteryIndicator(this);
+
+        const box = this._settings.get_string('position-box') || 'right';
+        let index = this._settings.get_int('position-index');
+
+        if (index === -1) {
+            index = 0;
+            if (box === 'right') {
+                const quickSettings = Main.panel.statusArea.quickSettings;
+                if (quickSettings) {
+                    const rightBox = Main.panel._rightBox;
+                    const children = rightBox.get_children();
+                    const qsIndex = children.indexOf(quickSettings.container);
+                    if (qsIndex >= 0)
+                        index = qsIndex;
+                }
+            }
+        }
+
+        Main.panel.addToStatusArea(this.uuid, this._indicator, index, box);
     }
 
     disable() {
+        if (this._positionChangedId) {
+            this._settings.disconnect(this._positionChangedId);
+            this._positionChangedId = null;
+        }
+        if (this._indexChangedId) {
+            this._settings.disconnect(this._indexChangedId);
+            this._indexChangedId = null;
+        }
+        this._settings = null;
+
         this._indicator?.destroy();
         this._indicator = null;
     }

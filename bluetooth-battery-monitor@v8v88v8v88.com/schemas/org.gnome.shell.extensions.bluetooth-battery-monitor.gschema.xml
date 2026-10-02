@@ -26,5 +26,30 @@
       <summary>Device type overrides</summary>
       <description>Manual overrides: each entry is "Device Name|type" (e.g. "Tribit XSound Go|speaker"). Types: headphone, speaker, controller, mouse, keyboard, phone, tv, tablet, watch, car.</description>
     </key>
+    <key name="position-box" type="s">
+      <default>'right'</default>
+      <summary>Position box</summary>
+      <description>Which panel box to place the indicator in: left, center, or right.</description>
+    </key>
+    <key name="position-index" type="i">
+      <default>-1</default>
+      <summary>Position index</summary>
+      <description>Position index within the panel box. Use -1 for automatic placement.</description>
+    </key>
+    <key name="show-advanced-settings" type="b">
+      <default>false</default>
+      <summary>Show advanced settings</summary>
+      <description>Whether to show advanced configuration options in preferences.</description>
+    </key>
+    <key name="hpadding" type="i">
+      <default>8</default>
+      <summary>Horizontal padding</summary>
+      <description>Horizontal padding inside the battery indicator capsule.</description>
+    </key>
+    <key name="outer-margin" type="i">
+      <default>0</default>
+      <summary>Outer margin</summary>
+      <description>Extra space around the battery indicator widget (0 = default, higher = more space).</description>
+    </key>
   </schema>
 </schemalist>

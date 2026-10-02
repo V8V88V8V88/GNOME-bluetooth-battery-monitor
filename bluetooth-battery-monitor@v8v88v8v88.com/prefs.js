@@ -107,6 +107,180 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         hideOriginalRow.add_suffix(hideOriginalSwitch);
         group.add(hideOriginalRow);
 
+        const advancedSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+            active: settings.get_boolean('show-advanced-settings'),
+        });
+        const advancedRow = new Adw.ActionRow({
+            title: 'Advanced Settings',
+            subtitle: 'Enable custom layout parameters (padding and spacing)',
+            activatable_widget: advancedSwitch,
+        });
+        advancedRow.add_suffix(advancedSwitch);
+        group.add(advancedRow);
+
+        const positioningGroup = new Adw.PreferencesGroup({
+            title: 'Positioning',
+        });
+        page.add(positioningGroup);
+
+        const BOX_OPTIONS = [
+            ['left', 'Panel: Left Box'],
+            ['center', 'Panel: Center Box'],
+            ['right', 'Panel: Right Box'],
+        ];
+        const boxModel = Gtk.StringList.new(BOX_OPTIONS.map(([, label]) => label));
+        const currentBox = settings.get_string('position-box') || 'right';
+        const selectedBoxIdx = BOX_OPTIONS.findIndex(([val]) => val === currentBox);
+
+        const containerTargetRow = new Adw.ComboRow({
+            title: 'Container Target',
+            subtitle: 'Select which area of the top panel to place the widget in',
+            model: boxModel,
+            selected: selectedBoxIdx >= 0 ? selectedBoxIdx : 2,
+        });
+        containerTargetRow.connect('notify::selected', (row) => {
+            const idx = row.selected;
+            const val = BOX_OPTIONS[idx]?.[0] ?? 'right';
+            if (settings.get_string('position-box') !== val) {
+                settings.set_string('position-box', val);
+            }
+        });
+        positioningGroup.add(containerTargetRow);
+
+        const updateBoxSelection = () => {
+            const val = settings.get_string('position-box') || 'right';
+            const idx = BOX_OPTIONS.findIndex(([o]) => o === val);
+            if (idx >= 0 && containerTargetRow.selected !== idx) {
+                containerTargetRow.selected = idx;
+            }
+        };
+        settings.connect('changed::position-box', updateBoxSelection);
+
+        const positionIndexSpinButton = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: -1,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('position-index'),
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'position-index',
+            positionIndexSpinButton,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+
+        const positionIndexRow = new Adw.ActionRow({
+            title: 'Position Index',
+            subtitle: 'Order within the box (-1 for Auto, 0 is leftmost)',
+            activatable_widget: positionIndexSpinButton,
+        });
+        positionIndexRow.add_suffix(positionIndexSpinButton);
+        positioningGroup.add(positionIndexRow);
+
+        const advancedGroup = new Adw.PreferencesGroup({
+            title: 'Advanced Layout Settings',
+            visible: settings.get_boolean('show-advanced-settings'),
+        });
+        page.add(advancedGroup);
+
+        const hpaddingSpinButton = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('hpadding'),
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'hpadding',
+            hpaddingSpinButton,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const hpaddingRow = new Adw.ActionRow({
+            title: 'Inner Horizontal Padding',
+            subtitle: 'Padding inside the widget capsule (default: 6)',
+            activatable_widget: hpaddingSpinButton,
+        });
+        hpaddingRow.add_suffix(hpaddingSpinButton);
+        advancedGroup.add(hpaddingRow);
+
+        const outerMarginSpinButton = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 20,
+                step_increment: 1,
+                page_increment: 5,
+                value: settings.get_int('outer-margin'),
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'outer-margin',
+            outerMarginSpinButton,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const outerMarginRow = new Adw.ActionRow({
+            title: 'Outer Margin (Widget Spacing)',
+            subtitle: 'Extra space around the widget (0 = default, higher = more space)',
+            activatable_widget: outerMarginSpinButton,
+        });
+        outerMarginRow.add_suffix(outerMarginSpinButton);
+        advancedGroup.add(outerMarginRow);
+
+        let isInternalChange = false;
+        advancedSwitch.connect('notify::active', () => {
+            if (isInternalChange) return;
+            const active = advancedSwitch.active;
+            if (active) {
+                isInternalChange = true;
+                advancedSwitch.active = false;
+                isInternalChange = false;
+
+                const dialog = new Adw.MessageDialog({
+                    transient_for: window,
+                    heading: 'Enable Advanced Settings?',
+                    body: 'Warning: Changing these layout properties can cause UI rendering issues or crash the GNOME Shell top panel. Please configure them with caution.',
+                });
+
+                dialog.add_response('cancel', 'Cancel');
+                dialog.add_response('enable', 'Enable');
+                dialog.set_response_appearance('enable', Adw.ResponseAppearance.DESTRUCTIVE);
+
+                dialog.connect('response', (dlg, responseId) => {
+                    if (responseId === 'enable') {
+                        settings.set_boolean('show-advanced-settings', true);
+                    }
+                    dlg.destroy();
+                });
+
+                dialog.present();
+            } else {
+                settings.set_boolean('show-advanced-settings', false);
+            }
+        });
+
+        const updateAdvancedGroupVisibility = () => {
+            const visible = settings.get_boolean('show-advanced-settings');
+            if (advancedGroup.visible !== visible) {
+                advancedGroup.visible = visible;
+            }
+            if (advancedSwitch.active !== visible) {
+                isInternalChange = true;
+                advancedSwitch.active = visible;
+                isInternalChange = false;
+            }
+        };
+        settings.connect('changed::show-advanced-settings', updateAdvancedGroupVisibility);
+
         const overrideGroup = new Adw.PreferencesGroup({
             title: 'Device icons',
             description: 'Choose icon type for each device. Set to Auto for automatic detection.',
@@ -209,6 +383,11 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             settings.reset('always-show-percentage');
             settings.reset('hide-original-bluetooth-icon');
             settings.reset('device-overrides');
+            settings.reset('position-box');
+            settings.reset('position-index');
+            settings.reset('show-advanced-settings');
+            settings.reset('hpadding');
+            settings.reset('outer-margin');
             buildDeviceList();
         });
         resetRow.add_suffix(resetButton);

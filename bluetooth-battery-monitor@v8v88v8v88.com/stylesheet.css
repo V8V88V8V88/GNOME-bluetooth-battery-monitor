@@ -1,10 +1,15 @@
+.bluetooth-battery-panel-button {
+    margin-left: 0px;
+    margin-right: 0px;
+}
+
 .bluetooth-battery-bt-icon {
     margin-right: 2px;
 }
 
 .bluetooth-battery-vertical-icon {
-    margin-left: 0;
-    margin-right: 0;
+    margin-left: 0px;
+    margin-right: 0px;
 }
 
 .bluetooth-battery-panel-label {
