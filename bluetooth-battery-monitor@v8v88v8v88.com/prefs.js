@@ -107,7 +107,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             activatable_widget: hideOriginalSwitch,
         });
         hideOriginalRow.add_suffix(hideOriginalSwitch);
-        group.add(hideOriginalRow);
 
         const advancedSwitch = new Gtk.Switch({
             valign: Gtk.Align.CENTER,
@@ -119,7 +118,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             activatable_widget: advancedSwitch,
         });
         advancedRow.add_suffix(advancedSwitch);
-        group.add(advancedRow);
 
         const positioningGroup = new Adw.PreferencesGroup({
             title: 'Positioning',
@@ -200,6 +198,8 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         });
         positionIndexRow.add_suffix(positionIndexSpinButton);
         positioningGroup.add(positionIndexRow);
+        positioningGroup.add(hideOriginalRow);
+        positioningGroup.add(advancedRow);
 
         const advancedGroup = new Adw.PreferencesGroup({
             title: 'Advanced Layout Settings',
