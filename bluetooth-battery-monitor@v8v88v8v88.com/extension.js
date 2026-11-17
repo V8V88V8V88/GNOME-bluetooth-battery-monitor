@@ -627,7 +627,7 @@ class PanelBatteryWidgets {
             style_class: 'bluetooth-battery-vertical-icon',
         });
         this._batteryIcon.set_size(10, 16);
-        this._batteryIcon.connect('repaint', area =>
+        this._repaintId = this._batteryIcon.connect('repaint', area =>
             repaintBattery(area, this._percentage, drawBatteryVertical));
         box.add_child(this._batteryIcon);
 
@@ -684,6 +684,13 @@ class PanelBatteryWidgets {
         for (const id of this._settingsIds)
             this._settings.disconnect(id);
         this._settingsIds = [];
+        this._batteryIcon.disconnect(this._repaintId);
+        this._btIcon.destroy();
+        this._batteryIcon.destroy();
+        this._percentLabel.destroy();
+        this._btIcon = null;
+        this._batteryIcon = null;
+        this._percentLabel = null;
     }
 }
 
@@ -847,7 +854,7 @@ class BluetoothMenuDecorator {
             y_align: Clutter.ActorAlign.CENTER,
         });
         deco.area.set_size(20, 10);
-        deco.area.connect('repaint', area => repaintBattery(area, deco.percentage, drawBatteryHorizontal));
+        deco.repaintId = deco.area.connect('repaint', area => repaintBattery(area, deco.percentage, drawBatteryHorizontal));
         deco.label = new St.Label({
             style_class: 'device-subtitle bluetooth-battery-bt-menu-label',
             y_align: Clutter.ActorAlign.CENTER,
@@ -894,6 +901,7 @@ class BluetoothMenuDecorator {
             this._client.disconnect(this._devicesChangedId);
         for (const [item, deco] of this._decorations) {
             item.disconnect(deco.destroyId);
+            deco.area.disconnect(deco.repaintId);
             deco.box.destroy();
         }
         this._decorations.clear();
@@ -942,9 +950,16 @@ export default class BluetoothBatteryMonitorExtension extends Extension {
         });
     }
 
-    _placeIndicator() {
+    _destroyIndicator() {
+        if (this._indicator && this._indicatorVisibleId)
+            this._indicator.disconnect(this._indicatorVisibleId);
+        this._indicatorVisibleId = null;
         this._indicator?.destroy();
         this._indicator = null;
+    }
+
+    _placeIndicator() {
+        this._destroyIndicator();
 
         const quickSettings = Main.panel.statusArea.quickSettings;
         const standalone = this._settings.get_boolean('use-standalone-button');
@@ -952,7 +967,7 @@ export default class BluetoothBatteryMonitorExtension extends Extension {
         if (!standalone && quickSettings?.addExternalIndicator) {
             this._indicator = new QuickSettingsBatteryIndicator(this._settings, this._monitor);
             quickSettings.addExternalIndicator(this._indicator);
-            this._indicator.connect('notify::visible', () => this._updateOriginalIcon());
+            this._indicatorVisibleId = this._indicator.connect('notify::visible', () => this._updateOriginalIcon());
 
             const container = this._indicator.get_parent();
             const bluetooth = quickSettings._bluetooth;
@@ -1034,8 +1049,7 @@ export default class BluetoothBatteryMonitorExtension extends Extension {
 
         this._menuDecorator?.destroy();
         this._menuDecorator = null;
-        this._indicator?.destroy();
-        this._indicator = null;
+        this._destroyIndicator();
         this._restoreOriginalIcon();
         this._monitor?.destroy();
         this._monitor = null;
