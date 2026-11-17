@@ -133,13 +133,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         settings.bind('position-index', positionIndexRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         positioningGroup.add(positionIndexRow);
         positioningGroup.add(hideOriginalRow);
-        positioningGroup.add(advancedRow);
-
-        const advancedGroup = new Adw.PreferencesGroup({
-            title: 'Advanced Layout Settings',
-            visible: settings.get_boolean('show-advanced-settings'),
-        });
-        page.add(advancedGroup);
 
         const hpaddingRow = new Adw.SpinRow({
             title: 'Inner Horizontal Padding',
@@ -153,7 +146,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             }),
         });
         settings.bind('hpadding', hpaddingRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-        advancedGroup.add(hpaddingRow);
 
         const outerMarginRow = new Adw.SpinRow({
             title: 'Outer Margin (Widget Spacing)',
@@ -167,7 +159,6 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             }),
         });
         settings.bind('outer-margin', outerMarginRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-        advancedGroup.add(outerMarginRow);
 
         let isInternalChange = false;
         advancedRow.connect('notify::active', () => {
@@ -213,7 +204,8 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             positionIndexRow.visible = standalone;
             hideOriginalRow.visible = standalone;
             advancedRow.visible = standalone;
-            advancedGroup.visible = standalone && enabled;
+            hpaddingRow.visible = standalone && enabled;
+            outerMarginRow.visible = standalone && enabled;
             if (advancedRow.active !== enabled) {
                 isInternalChange = true;
                 advancedRow.active = enabled;
@@ -332,6 +324,9 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             buildDeviceList();
         });
         resetRow.add_suffix(resetButton);
+        resetGroup.add(advancedRow);
+        resetGroup.add(hpaddingRow);
+        resetGroup.add(outerMarginRow);
         resetGroup.add(resetRow);
 
         window.add(page);
