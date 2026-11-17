@@ -3,6 +3,7 @@ import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
+import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -779,6 +780,11 @@ const PanelBatteryIndicator = GObject.registerClass(
                 }));
 
                 item.connect('activate', () => {
+                    const app = Shell.AppSystem.get_default().lookup_app('gnome-bluetooth-panel.desktop');
+                    if (app) {
+                        app.activate();
+                        return;
+                    }
                     try {
                         Gio.Subprocess.new(['gnome-control-center', 'bluetooth'], Gio.SubprocessFlags.NONE);
                     } catch (e) {

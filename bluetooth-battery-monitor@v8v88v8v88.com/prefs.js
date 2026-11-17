@@ -29,7 +29,8 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup();
         page.add(group);
 
-        const updateIntervalSpinButton = new Gtk.SpinButton({
+        const updateIntervalRow = new Adw.SpinRow({
+            title: 'Update Interval (minutes)',
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 60,
@@ -37,53 +38,22 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                 page_increment: 10,
                 value: settings.get_int('update-interval'),
             }),
-            valign: Gtk.Align.CENTER,
         });
-        settings.bind(
-            'update-interval',
-            updateIntervalSpinButton,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const updateIntervalRow = new Adw.ActionRow({
-            title: 'Update Interval (minutes)',
-            activatable_widget: updateIntervalSpinButton,
-        });
-        updateIntervalRow.add_suffix(updateIntervalSpinButton);
+        settings.bind('update-interval', updateIntervalRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         group.add(updateIntervalRow);
 
-        const alwaysShowSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind(
-            'always-show-percentage',
-            alwaysShowSwitch,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const alwaysShowRow = new Adw.ActionRow({
+        const alwaysShowRow = new Adw.SwitchRow({
             title: 'Always show percentage',
             subtitle: 'Keep the battery percentage always visible in the panel',
-            activatable_widget: alwaysShowSwitch,
         });
-        alwaysShowRow.add_suffix(alwaysShowSwitch);
+        settings.bind('always-show-percentage', alwaysShowRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         group.add(alwaysShowRow);
 
-        const showHoverSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind(
-            'show-hover-percentage',
-            showHoverSwitch,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const showHoverRow = new Adw.ActionRow({
+        const showHoverRow = new Adw.SwitchRow({
             title: 'Show percentage on hover',
             subtitle: 'When "Always show" is off: show percentage on hover. Disable to prevent layout shifts.',
-            activatable_widget: showHoverSwitch,
         });
-        showHoverRow.add_suffix(showHoverSwitch);
+        settings.bind('show-hover-percentage', showHoverRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         group.add(showHoverRow);
 
         const updateHoverSensitivity = () => {
@@ -92,53 +62,28 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         updateHoverSensitivity();
         settings.connect('changed::always-show-percentage', updateHoverSensitivity);
 
-        const hideOriginalSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind(
-            'hide-original-bluetooth-icon',
-            hideOriginalSwitch,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const hideOriginalRow = new Adw.ActionRow({
+        const hideOriginalRow = new Adw.SwitchRow({
             title: 'Hide original Bluetooth icon',
             subtitle: 'Hide the built-in Bluetooth status icon and only show this extension',
-            activatable_widget: hideOriginalSwitch,
         });
-        hideOriginalRow.add_suffix(hideOriginalSwitch);
+        settings.bind('hide-original-bluetooth-icon', hideOriginalRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
-        const advancedSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-            active: settings.get_boolean('show-advanced-settings'),
-        });
-        const advancedRow = new Adw.ActionRow({
+        const advancedRow = new Adw.SwitchRow({
             title: 'Advanced Settings',
             subtitle: 'Enable custom layout parameters (padding and spacing)',
-            activatable_widget: advancedSwitch,
+            active: settings.get_boolean('show-advanced-settings'),
         });
-        advancedRow.add_suffix(advancedSwitch);
 
         const positioningGroup = new Adw.PreferencesGroup({
             title: 'Positioning',
         });
         page.add(positioningGroup);
 
-        const standaloneSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-        settings.bind(
-            'use-standalone-button',
-            standaloneSwitch,
-            'active',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const standaloneRow = new Adw.ActionRow({
+        const standaloneRow = new Adw.SwitchRow({
             title: 'Separate top bar button',
             subtitle: 'Show the indicator outside Quick Settings as its own button with a device list',
-            activatable_widget: standaloneSwitch,
         });
-        standaloneRow.add_suffix(standaloneSwitch);
+        settings.bind('use-standalone-button', standaloneRow, 'active', Gio.SettingsBindFlags.DEFAULT);
         positioningGroup.add(standaloneRow);
 
         const BOX_OPTIONS = [
@@ -174,7 +119,9 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         };
         settings.connect('changed::position-box', updateBoxSelection);
 
-        const positionIndexSpinButton = new Gtk.SpinButton({
+        const positionIndexRow = new Adw.SpinRow({
+            title: 'Position Index',
+            subtitle: 'Order within the box (-1 for Auto, 0 is leftmost)',
             adjustment: new Gtk.Adjustment({
                 lower: -1,
                 upper: 20,
@@ -182,21 +129,8 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                 page_increment: 5,
                 value: settings.get_int('position-index'),
             }),
-            valign: Gtk.Align.CENTER,
         });
-        settings.bind(
-            'position-index',
-            positionIndexSpinButton,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-
-        const positionIndexRow = new Adw.ActionRow({
-            title: 'Position Index',
-            subtitle: 'Order within the box (-1 for Auto, 0 is leftmost)',
-            activatable_widget: positionIndexSpinButton,
-        });
-        positionIndexRow.add_suffix(positionIndexSpinButton);
+        settings.bind('position-index', positionIndexRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         positioningGroup.add(positionIndexRow);
         positioningGroup.add(hideOriginalRow);
         positioningGroup.add(advancedRow);
@@ -207,7 +141,9 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         });
         page.add(advancedGroup);
 
-        const hpaddingSpinButton = new Gtk.SpinButton({
+        const hpaddingRow = new Adw.SpinRow({
+            title: 'Inner Horizontal Padding',
+            subtitle: 'Padding inside the widget capsule (default: 12)',
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 20,
@@ -215,23 +151,13 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                 page_increment: 5,
                 value: settings.get_int('hpadding'),
             }),
-            valign: Gtk.Align.CENTER,
         });
-        settings.bind(
-            'hpadding',
-            hpaddingSpinButton,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const hpaddingRow = new Adw.ActionRow({
-            title: 'Inner Horizontal Padding',
-            subtitle: 'Padding inside the widget capsule (default: 12)',
-            activatable_widget: hpaddingSpinButton,
-        });
-        hpaddingRow.add_suffix(hpaddingSpinButton);
+        settings.bind('hpadding', hpaddingRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         advancedGroup.add(hpaddingRow);
 
-        const outerMarginSpinButton = new Gtk.SpinButton({
+        const outerMarginRow = new Adw.SpinRow({
+            title: 'Outer Margin (Widget Spacing)',
+            subtitle: 'Extra space around the widget (0 = default, higher = more space)',
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 20,
@@ -239,29 +165,17 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                 page_increment: 5,
                 value: settings.get_int('outer-margin'),
             }),
-            valign: Gtk.Align.CENTER,
         });
-        settings.bind(
-            'outer-margin',
-            outerMarginSpinButton,
-            'value',
-            Gio.SettingsBindFlags.DEFAULT,
-        );
-        const outerMarginRow = new Adw.ActionRow({
-            title: 'Outer Margin (Widget Spacing)',
-            subtitle: 'Extra space around the widget (0 = default, higher = more space)',
-            activatable_widget: outerMarginSpinButton,
-        });
-        outerMarginRow.add_suffix(outerMarginSpinButton);
+        settings.bind('outer-margin', outerMarginRow, 'value', Gio.SettingsBindFlags.DEFAULT);
         advancedGroup.add(outerMarginRow);
 
         let isInternalChange = false;
-        advancedSwitch.connect('notify::active', () => {
+        advancedRow.connect('notify::active', () => {
             if (isInternalChange) return;
-            const active = advancedSwitch.active;
+            const active = advancedRow.active;
             if (active) {
                 isInternalChange = true;
-                advancedSwitch.active = false;
+                advancedRow.active = false;
                 isInternalChange = false;
 
                 const dialogProps = {
@@ -300,9 +214,9 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             hideOriginalRow.visible = standalone;
             advancedRow.visible = standalone;
             advancedGroup.visible = standalone && enabled;
-            if (advancedSwitch.active !== enabled) {
+            if (advancedRow.active !== enabled) {
                 isInternalChange = true;
-                advancedSwitch.active = enabled;
+                advancedRow.active = enabled;
                 isInternalChange = false;
             }
         };
