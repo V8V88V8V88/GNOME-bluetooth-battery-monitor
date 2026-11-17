@@ -225,7 +225,7 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         );
         const hpaddingRow = new Adw.ActionRow({
             title: 'Inner Horizontal Padding',
-            subtitle: 'Padding inside the widget capsule (default: 6)',
+            subtitle: 'Padding inside the widget capsule (default: 12)',
             activatable_widget: hpaddingSpinButton,
         });
         hpaddingRow.add_suffix(hpaddingSpinButton);

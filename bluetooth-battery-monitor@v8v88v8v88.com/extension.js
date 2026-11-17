@@ -726,6 +726,7 @@ const PanelBatteryIndicator = GObject.registerClass(
             this._widgets.setHoverActor(this);
 
             this._styleIds = [
+                this._settings.connect('changed::show-advanced-settings', () => this._updateStyle()),
                 this._settings.connect('changed::hpadding', () => this._updateStyle()),
                 this._settings.connect('changed::outer-margin', () => this._updateStyle()),
             ];
@@ -735,6 +736,10 @@ const PanelBatteryIndicator = GObject.registerClass(
         }
 
         _updateStyle() {
+            if (!this._settings.get_boolean('show-advanced-settings')) {
+                this.style = null;
+                return;
+            }
             const hpadding = this._settings.get_int('hpadding');
             const outerMargin = Math.max(0, this._settings.get_int('outer-margin'));
             this.style = `-natural-hpadding: ${hpadding}px; -minimum-hpadding: ${Math.max(0, Math.floor(hpadding / 2))}px; margin-left: ${outerMargin}px; margin-right: ${outerMargin}px;`;

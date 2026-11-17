@@ -47,7 +47,7 @@
       <description>Whether to show advanced configuration options in preferences.</description>
     </key>
     <key name="hpadding" type="i">
-      <default>8</default>
+      <default>12</default>
       <summary>Horizontal padding</summary>
       <description>Horizontal padding inside the battery indicator capsule.</description>
     </key>
