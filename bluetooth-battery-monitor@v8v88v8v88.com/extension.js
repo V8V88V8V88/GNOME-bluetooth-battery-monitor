@@ -21,6 +21,7 @@ const BLUEZ_BUS = 'org.bluez';
 const BLUEZ_ROOT = '/';
 const OBJECT_MANAGER_IFACE = 'org.freedesktop.DBus.ObjectManager';
 const BLUEZ_DEVICE_IFACE = 'org.bluez.Device1';
+const BLUEZ_BATTERY_IFACE = 'org.bluez.Battery1';
 
 const LOGIN_BUS = 'org.freedesktop.login1';
 const LOGIN_PATH = '/org/freedesktop/login1';
@@ -376,6 +377,18 @@ class BatteryMonitor {
                         this._queueRefresh(1000);
                 }),
             systemBus.signal_subscribe(
+                BLUEZ_BUS,
+                PROPERTIES_IFACE,
+                'PropertiesChanged',
+                null,
+                BLUEZ_BATTERY_IFACE,
+                Gio.DBusSignalFlags.NONE,
+                (_conn, _sender, _path, _iface, _signal, params) => {
+                    const [, changed] = params.deep_unpack();
+                    if ('Percentage' in changed)
+                        this._queueRefresh(1000);
+                }),
+            systemBus.signal_subscribe(
                 LOGIN_BUS,
                 LOGIN_MANAGER_IFACE,
                 'PrepareForSleep',
@@ -476,7 +489,9 @@ class BatteryMonitor {
                     continue;
                 const cod = dev.Class?.deep_unpack?.() ?? dev.Class;
                 const icon = dev.Icon?.deep_unpack?.() ?? dev.Icon;
-                map.set(key, {cod, icon});
+                const battery = objects[path]?.[BLUEZ_BATTERY_IFACE]?.Percentage;
+                const percentage = battery?.deep_unpack?.() ?? battery;
+                map.set(key, {cod, icon, percentage});
             }
         } catch (e) {
             if (!e.message?.includes('not found'))
@@ -552,13 +567,14 @@ class BatteryMonitor {
             if (bluez && bluezKey && bluez.known.has(bluezKey) && !bluez.connected.has(bluezKey))
                 continue;
 
+            const bluezInfo = bluezKey ? bluez?.connected.get(bluezKey) : null;
+            if (typeof bluezInfo?.percentage === 'number')
+                props.percentage = bluezInfo.percentage;
+
             let deviceType = deviceTypeFromOverrides(props.model, overrides) ??
                 deviceTypeFromName(props.model);
-            if (!deviceType && bluezKey) {
-                const info = bluez?.connected.get(bluezKey);
-                if (info)
-                    deviceType = deviceTypeFromBlueZ(info.cod, info.icon) ?? 'headphone';
-            }
+            if (!deviceType && bluezInfo)
+                deviceType = deviceTypeFromBlueZ(bluezInfo.cod, bluezInfo.icon) ?? 'headphone';
 
             devices.push({...props, mac, deviceType: deviceType ?? 'unknown'});
         }
