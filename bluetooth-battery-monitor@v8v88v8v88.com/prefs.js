@@ -264,24 +264,29 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                 advancedSwitch.active = false;
                 isInternalChange = false;
 
-                const dialog = new Adw.MessageDialog({
-                    transient_for: window,
+                const dialogProps = {
                     heading: 'Enable Advanced Settings?',
                     body: 'Warning: Changing these layout properties can cause UI rendering issues or crash the GNOME Shell top panel. Please configure them with caution.',
-                });
+                };
+                const dialog = Adw.AlertDialog
+                    ? new Adw.AlertDialog(dialogProps)
+                    : new Adw.MessageDialog({...dialogProps, transient_for: window});
 
                 dialog.add_response('cancel', 'Cancel');
                 dialog.add_response('enable', 'Enable');
                 dialog.set_response_appearance('enable', Adw.ResponseAppearance.DESTRUCTIVE);
+                dialog.set_default_response('cancel');
+                dialog.set_close_response('cancel');
 
-                dialog.connect('response', (dlg, responseId) => {
-                    if (responseId === 'enable') {
+                dialog.connect('response', (_dlg, responseId) => {
+                    if (responseId === 'enable')
                         settings.set_boolean('show-advanced-settings', true);
-                    }
-                    dlg.destroy();
                 });
 
-                dialog.present();
+                if (Adw.AlertDialog)
+                    dialog.present(window);
+                else
+                    dialog.present();
             } else {
                 settings.set_boolean('show-advanced-settings', false);
             }
