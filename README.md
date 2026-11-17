@@ -9,8 +9,7 @@ A GNOME Shell extension that shows battery levels of connected Bluetooth devices
 - Lives inside the Quick Settings area, next to Wi-Fi and volume, showing the lowest connected device's charge
 - Battery level of every connected device shown in the Bluetooth menu of Quick Settings
 - Color-coded fill: green (>50%), yellow (>20%), red (<=20%)
-- Hover to see the exact percentage (can be disabled to avoid layout shifts)
-- Option to always show percentage in the panel
+- Optional percentage in the panel, always visible or on hover
 - Device icons for headphones, earbuds, speakers, controllers, mice, keyboards, phones, tablets, TVs, watches and cars, detected automatically or picked per device
 - Optional separate top bar button (left, center or right) with its own device list
 - Configurable polling interval (1-60 minutes)
