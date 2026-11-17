@@ -22,6 +22,10 @@ const BLUEZ_ROOT = '/';
 const OBJECT_MANAGER_IFACE = 'org.freedesktop.DBus.ObjectManager';
 const BLUEZ_DEVICE_IFACE = 'org.bluez.Device1';
 
+const LOGIN_BUS = 'org.freedesktop.login1';
+const LOGIN_PATH = '/org/freedesktop/login1';
+const LOGIN_MANAGER_IFACE = 'org.freedesktop.login1.Manager';
+
 const DEVICE_TYPE_LINE_POWER = 1;
 const DEVICE_TYPE_BATTERY = 2;
 
@@ -357,8 +361,46 @@ class BatteryMonitor {
             this._settings.connect('changed::device-overrides', () => this.refresh()),
         ];
 
+        const systemBus = Gio.DBus.system;
+        this._busSubscriptions = [
+            systemBus.signal_subscribe(
+                BLUEZ_BUS,
+                PROPERTIES_IFACE,
+                'PropertiesChanged',
+                null,
+                BLUEZ_DEVICE_IFACE,
+                Gio.DBusSignalFlags.NONE,
+                (_conn, _sender, _path, _iface, _signal, params) => {
+                    const [, changed] = params.deep_unpack();
+                    if ('Connected' in changed)
+                        this._queueRefresh(1000);
+                }),
+            systemBus.signal_subscribe(
+                LOGIN_BUS,
+                LOGIN_MANAGER_IFACE,
+                'PrepareForSleep',
+                LOGIN_PATH,
+                null,
+                Gio.DBusSignalFlags.NONE,
+                (_conn, _sender, _path, _iface, _signal, params) => {
+                    const [goingToSleep] = params.deep_unpack();
+                    if (!goingToSleep)
+                        this._queueRefresh(3000);
+                }),
+        ];
+
         this._startPolling();
         this.refresh();
+    }
+
+    _queueRefresh(delayMs) {
+        if (this._refreshSourceId)
+            GLib.source_remove(this._refreshSourceId);
+        this._refreshSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delayMs, () => {
+            this._refreshSourceId = null;
+            this.refresh();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     addListener(fn) {
@@ -392,6 +434,7 @@ class BatteryMonitor {
 
     _getBlueZDeviceMap() {
         const map = new Map();
+        const known = new Set();
         try {
             const connection = Gio.bus_get_sync(Gio.BusType.SYSTEM, null);
             const ownerResult = connection.call_sync(
@@ -406,7 +449,7 @@ class BatteryMonitor {
                 null,
             );
             if (!ownerResult.deep_unpack()[0])
-                return map;
+                return null;
 
             const proxy = Gio.DBusProxy.new_for_bus_sync(
                 Gio.BusType.SYSTEM,
@@ -423,13 +466,14 @@ class BatteryMonitor {
                 const dev = objects[path]?.[BLUEZ_DEVICE_IFACE];
                 if (!dev)
                     continue;
-                const connected = dev.Connected?.deep_unpack?.() ?? dev.Connected;
-                if (!connected)
-                    continue;
                 const addr = dev.Address?.deep_unpack?.() ?? dev.Address;
                 if (!addr)
                     continue;
                 const key = String(addr).toLowerCase().replace(/:/g, '_');
+                known.add(key);
+                const connected = dev.Connected?.deep_unpack?.() ?? dev.Connected;
+                if (!connected)
+                    continue;
                 const cod = dev.Class?.deep_unpack?.() ?? dev.Class;
                 const icon = dev.Icon?.deep_unpack?.() ?? dev.Icon;
                 map.set(key, {cod, icon});
@@ -437,8 +481,9 @@ class BatteryMonitor {
         } catch (e) {
             if (!e.message?.includes('not found'))
                 console.error(`BluetoothBatteryMonitor BlueZ: ${e.message}`);
+            return null;
         }
-        return map;
+        return {connected: map, known};
     }
 
     _enumerateDevices() {
@@ -491,7 +536,7 @@ class BatteryMonitor {
         if (!this._upower)
             return;
 
-        const bluezMap = this._getBlueZDeviceMap();
+        const bluez = this._getBlueZDeviceMap();
         const overrides = this._settings.get_strv('device-overrides');
         const devices = [];
 
@@ -503,12 +548,16 @@ class BatteryMonitor {
                 continue;
 
             const mac = macFromUPowerPath(path);
+            const bluezKey = mac?.replace(/:/g, '_');
+            if (bluez && bluezKey && bluez.known.has(bluezKey) && !bluez.connected.has(bluezKey))
+                continue;
+
             let deviceType = deviceTypeFromOverrides(props.model, overrides) ??
                 deviceTypeFromName(props.model);
-            if (!deviceType && mac) {
-                const bluez = bluezMap.get(mac.replace(/:/g, '_'));
-                if (bluez)
-                    deviceType = deviceTypeFromBlueZ(bluez.cod, bluez.icon) ?? 'headphone';
+            if (!deviceType && bluezKey) {
+                const info = bluez?.connected.get(bluezKey);
+                if (info)
+                    deviceType = deviceTypeFromBlueZ(info.cod, info.icon) ?? 'headphone';
             }
 
             devices.push({...props, mac, deviceType: deviceType ?? 'unknown'});
@@ -524,6 +573,13 @@ class BatteryMonitor {
             GLib.source_remove(this._pollSourceId);
             this._pollSourceId = null;
         }
+        if (this._refreshSourceId) {
+            GLib.source_remove(this._refreshSourceId);
+            this._refreshSourceId = null;
+        }
+        for (const id of this._busSubscriptions ?? [])
+            Gio.DBus.system.signal_unsubscribe(id);
+        this._busSubscriptions = [];
         for (const id of this._settingsIds)
             this._settings.disconnect(id);
         this._settingsIds = [];
