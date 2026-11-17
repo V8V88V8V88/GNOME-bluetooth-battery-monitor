@@ -7,7 +7,9 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 const COMBO_OPTIONS = [
     ['', 'Auto'],
+    ['bluetooth', 'Bluetooth'],
     ['headphone', 'Headphone'],
+    ['earbuds', 'Earbuds'],
     ['speaker', 'Speaker'],
     ['controller', 'Controller'],
     ['mouse', 'Mouse'],
@@ -124,6 +126,23 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         });
         page.add(positioningGroup);
 
+        const standaloneSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            'use-standalone-button',
+            standaloneSwitch,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        const standaloneRow = new Adw.ActionRow({
+            title: 'Separate top bar button',
+            subtitle: 'Show the indicator outside Quick Settings as its own button with a device list',
+            activatable_widget: standaloneSwitch,
+        });
+        standaloneRow.add_suffix(standaloneSwitch);
+        positioningGroup.add(standaloneRow);
+
         const BOX_OPTIONS = [
             ['left', 'Panel: Left Box'],
             ['center', 'Panel: Center Box'],
@@ -135,7 +154,7 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
 
         const containerTargetRow = new Adw.ComboRow({
             title: 'Container Target',
-            subtitle: 'Select which area of the top panel to place the widget in',
+            subtitle: 'Select which area of the top panel to place the button in',
             model: boxModel,
             selected: selectedBoxIdx >= 0 ? selectedBoxIdx : 2,
         });
@@ -269,17 +288,22 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         });
 
         const updateAdvancedGroupVisibility = () => {
-            const visible = settings.get_boolean('show-advanced-settings');
-            if (advancedGroup.visible !== visible) {
-                advancedGroup.visible = visible;
-            }
-            if (advancedSwitch.active !== visible) {
+            const enabled = settings.get_boolean('show-advanced-settings');
+            const standalone = settings.get_boolean('use-standalone-button');
+            containerTargetRow.visible = standalone;
+            positionIndexRow.visible = standalone;
+            hideOriginalRow.visible = standalone;
+            advancedRow.visible = standalone;
+            advancedGroup.visible = standalone && enabled;
+            if (advancedSwitch.active !== enabled) {
                 isInternalChange = true;
-                advancedSwitch.active = visible;
+                advancedSwitch.active = enabled;
                 isInternalChange = false;
             }
         };
         settings.connect('changed::show-advanced-settings', updateAdvancedGroupVisibility);
+        settings.connect('changed::use-standalone-button', updateAdvancedGroupVisibility);
+        updateAdvancedGroupVisibility();
 
         const overrideGroup = new Adw.PreferencesGroup({
             title: 'Device icons',
@@ -383,6 +407,7 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
             settings.reset('always-show-percentage');
             settings.reset('hide-original-bluetooth-icon');
             settings.reset('device-overrides');
+            settings.reset('use-standalone-button');
             settings.reset('position-box');
             settings.reset('position-index');
             settings.reset('show-advanced-settings');

@@ -13,7 +13,6 @@
 }
 
 .bluetooth-battery-panel-label {
-    font-size: 0.85em;
     margin-left: 4px;
 }
 
@@ -25,4 +24,9 @@
 
 .bluetooth-battery-menu-device-icon {
     margin-right: 8px;
+}
+
+.bluetooth-battery-bt-menu-box {
+    spacing: 6px;
+    margin-right: 12px;
 }
