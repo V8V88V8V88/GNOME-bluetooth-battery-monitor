@@ -2,6 +2,8 @@
 
 A GNOME Shell extension that shows battery levels of connected Bluetooth devices right in your top panel.
 
+[<img src="https://raw.githubusercontent.com/andyholmes/gnome-shell-extensions-badge/master/get-it-on-ego.svg?sanitize=true" height="100">](https://extensions.gnome.org/extension/9308/bluetooth-battery-monitor/)
+
 ## Features
 
 - Lives inside the Quick Settings area, next to Wi-Fi and volume, showing the lowest connected device's charge
@@ -13,13 +15,7 @@ A GNOME Shell extension that shows battery levels of connected Bluetooth devices
 - Optional separate top bar button (left, center or right) with its own device list
 - Configurable polling interval (1-60 minutes)
 
-## Installation
-
-### From GNOME Extensions
-
-[<img src="https://raw.githubusercontent.com/andyholmes/gnome-shell-extensions-badge/master/get-it-on-ego.svg?sanitize=true" height="100">](https://extensions.gnome.org/extension/9308/bluetooth-battery-monitor/)
-
-### Manual
+## Manual Installation
 
 ```bash
 git clone https://github.com/V8V88V8V88/GNOME-bluetooth-battery-monitor.git
