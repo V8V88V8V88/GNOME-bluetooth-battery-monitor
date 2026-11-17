@@ -312,7 +312,7 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         page.add(overrideGroup);
 
         const model = Gtk.StringList.new(COMBO_OPTIONS.map(([, label]) => label));
-        let devices = [];
+        let deviceRows = [];
 
         function getOverrideFor(modelName) {
             const overrides = settings.get_strv('device-overrides');
@@ -337,13 +337,9 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
         }
 
         function buildDeviceList() {
-            let child = overrideGroup.get_first_child();
-            while (child) {
-                const next = child.get_next_sibling();
-                overrideGroup.remove(child);
-                child = next;
-            }
-            devices = [];
+            for (const row of deviceRows)
+                overrideGroup.remove(row);
+            deviceRows = [];
             try {
                 const bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, null);
                 const paths = bus.call_sync('org.freedesktop.UPower', '/org/freedesktop/UPower', 'org.freedesktop.UPower', 'EnumerateDevices', null, null, Gio.DBusCallFlags.NONE, -1, null).deep_unpack()[0];
@@ -372,16 +368,17 @@ export default class BluetoothBatteryMonitorPrefs extends ExtensionPreferences {
                             setOverride(name, type);
                         });
                         overrideGroup.add(comboRow);
-                        devices.push({ name, comboRow });
+                        deviceRows.push(comboRow);
                     } catch (_e) { }
                 }
             } catch (_e) { }
-            if (devices.length === 0) {
+            if (deviceRows.length === 0) {
                 const emptyRow = new Adw.ActionRow({
                     title: 'No devices connected',
                     subtitle: 'Connect a Bluetooth device with battery to configure its icon.',
                 });
                 overrideGroup.add(emptyRow);
+                deviceRows.push(emptyRow);
             }
         }
 
